@@ -40,7 +40,7 @@ export default function MapClient({ places }: any) {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "prompt" | "granted" | "denied" | "unavailable">("idle");
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
 
   useEffect(() => {
     setMounted(true);
@@ -124,10 +124,71 @@ export default function MapClient({ places }: any) {
     [safePlaces, normalizedFilter],
   );
 
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const getDistanceKm = ([lat1, lon1]: [number, number], [lat2, lon2]: [number, number]) => {
+    const earthRadiusKm = 6371;
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadiusKm * c;
+  };
+
+  const formatDistance = (distance?: number) => {
+    if (distance == null) return "Onbekend";
+    if (distance < 1) return `${Math.round(distance * 1000)} m`;
+    return `${distance.toFixed(1)} km`;
+  };
+
+  const listPlaces = useMemo(() => {
+    const filtered = normalizedFilter === "all"
+      ? safePlaces
+      : safePlaces.filter((place: any) => normalizeType(place.type) === normalizedFilter);
+
+    return filtered
+      .map((place: any) => ({
+        ...place,
+        distance: userLocation ? getDistanceKm(userLocation, place.position) : undefined,
+      }))
+      .sort((a: any, b: any) => {
+        if (a.distance == null) return 1;
+        if (b.distance == null) return -1;
+        return a.distance - b.distance;
+      });
+  }, [safePlaces, normalizedFilter, userLocation]);
+
   if (!mounted) return null;
 
   return (
     <div className="w-screen h-screen relative">
+      <div className="absolute top-4 left-4 z-[1000] flex flex-wrap gap-2 bg-white p-3 rounded-xl shadow">
+        <button
+          type="button"
+          className={`rounded px-3 py-1 text-sm transition ${
+            viewMode === "map"
+              ? "bg-slate-900 text-white"
+              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+          }`}
+          onClick={() => setViewMode("map")}
+        >
+          Kaart
+        </button>
+        <button
+          type="button"
+          className={`rounded px-3 py-1 text-sm transition ${
+            viewMode === "list"
+              ? "bg-slate-900 text-white"
+              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+          }`}
+          onClick={() => setViewMode("list")}
+        >
+          Lijst
+        </button>
+      </div>
+
       <div className="absolute top-4 right-4 z-[1000] flex flex-wrap gap-2 bg-white p-3 rounded-xl shadow">
         {filterOptions.map((option) => (
           <button
@@ -143,53 +204,10 @@ export default function MapClient({ places }: any) {
             {option.label}
           </button>
         ))}
-        <button
-          type="button"
-          className="rounded px-3 py-1 text-sm bg-slate-900 text-white hover:bg-slate-800"
-          onClick={() => setShowInfoPanel((open) => !open)}
-        >
-          {showInfoPanel ? "Verberg info" : "Toon info"}
-        </button>
       </div>
 
-      {showInfoPanel && (
-        <div className="absolute bottom-4 left-4 z-[1000] w-[min(320px,calc(100vw-2rem))] bg-white p-3 rounded-xl shadow text-sm text-slate-700">
-        <div>
-          <strong>Filter:</strong> {filter}
-        </div>
-        <div>
-          <strong>Results:</strong> {visiblePlaces.length}
-        </div>
-        <div>
-          <strong>Locatie status:</strong>{" "}
-          {locationStatus === "idle"
-            ? "Nog niet gevraagd"
-            : locationStatus === "prompt"
-            ? "Vraagt locatie..."
-            : locationStatus === "granted"
-            ? "Gevonden"
-            : locationStatus === "denied"
-            ? "Geblokkeerd"
-            : "Niet ondersteund"}
-        </div>
-        <div>
-          <strong>Je locatie:</strong>{" "}
-          {userLocation ? `✓ ${userLocation[0].toFixed(3)}, ${userLocation[1].toFixed(3)}` : "✗ Niet beschikbaar"}
-        </div>
-        {locationStatus === "denied" && (
-          <div className="mt-2 text-xs text-slate-500">
-            Safari kan geolocatie alleen opnieuw proberen na een pagina-refresh als toestemming in de browserinstellingen is gewijzigd.
-          </div>
-        )}
-        {locationError && (
-          <div className="text-red-600">
-            <strong>Fout:</strong> {locationError}
-          </div>
-        )}
-      </div>
-      )}
-
-      <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full">
+      {viewMode === "map" ? (
+        <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full">
         <TileLayer
           attribution='Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
@@ -211,6 +229,32 @@ export default function MapClient({ places }: any) {
           </Marker>
         )}
       </MapContainer>
+      ) : (
+        <div className="absolute inset-0 overflow-auto bg-slate-50 p-4">
+          <div className="max-w-4xl mx-auto space-y-4">
+            {listPlaces.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-600">
+                Geen locaties gevonden voor deze filter.
+              </div>
+            ) : (
+              listPlaces.map((place: any) => (
+                <div key={place.name} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="text-lg font-semibold text-slate-900">{place.name}</div>
+                      <div className="text-sm text-slate-500">{place.type === "cafe" ? "Café" : place.type === "shop" ? "Supermarkt" : place.type}</div>
+                    </div>
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+                      {formatDistance(place.distance)}
+                    </div>
+                  </div>
+                  <div className="mt-3 text-slate-600">{place.info}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
