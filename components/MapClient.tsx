@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -207,11 +207,12 @@ export default function MapClient({ places }: any) {
       </div>
 
       {viewMode === "map" ? (
-        <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full">
+        <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full" zoomControl={false}>
         <TileLayer
           attribution='Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
         />
+        <ZoomControl position="bottomright" />
 
         {visiblePlaces.map((place: any) => (
           <Marker key={place.name} position={place.position} icon={icon}>
