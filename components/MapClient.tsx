@@ -4,7 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import type { Place } from "@/data/placeTypes";
+
+type OpeningInterval = {
+  open: string;
+  close: string;
+};
+
+type Place = {
+  name: string;
+  position: [number, number];
+  info: string;
+  type: "cafe" | "shop";
+  address: string;
+  hours: OpeningInterval[][];
+};
 
 const icon = new L.Icon({
   iconUrl: "/custom-pin.png",
