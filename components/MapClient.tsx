@@ -4,20 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-
-type OpeningInterval = {
-  open: string;
-  close: string;
-};
-
-export type MapPlace = {
-  name: string;
-  position: [number, number];
-  info: string;
-  type: "cafe" | "shop";
-  address: string;
-  hours: OpeningInterval[][];
-};
+import type { Place } from "@/data/placeTypes";
 
 const icon = new L.Icon({
   iconUrl: "/custom-pin.png",
@@ -53,7 +40,7 @@ const weekdayToIndex: Record<string, number> = {
 };
 const placeTimeZone = "Europe/Brussels";
 
-type PlaceWithDistance = MapPlace & {
+type PlaceWithDistance = Place & {
   distance?: number;
 };
 
@@ -94,7 +81,7 @@ const getBrusselsTimeParts = (date: Date) => {
   };
 };
 
-const getOpenStatus = (place: MapPlace, now: Date): OpenStatus => {
+const getOpenStatus = (place: Place, now: Date): OpenStatus => {
   const { dayIndex, minutes } = getBrusselsTimeParts(now);
   const todayHours = place.hours[dayIndex] ?? [];
   const previousDayIndex = (dayIndex + 6) % 7;
@@ -146,7 +133,7 @@ const getOpenStatus = (place: MapPlace, now: Date): OpenStatus => {
   };
 };
 
-const formatHours = (hours: MapPlace["hours"]) =>
+const formatHours = (hours: Place["hours"]) =>
   hours.map((intervals, index) => ({
     day: shortDayLabels[index],
     value: intervals.length === 0
@@ -154,7 +141,7 @@ const formatHours = (hours: MapPlace["hours"]) =>
       : intervals.map((interval) => `${interval.open}-${interval.close}`).join(", "),
   }));
 
-const typeLabel = (type: MapPlace["type"]) => (type === "cafe" ? "Café" : "Supermarkt");
+const typeLabel = (type: Place["type"]) => (type === "cafe" ? "Café" : "Supermarkt");
 
 function OpenBadge({ status }: { status: OpenStatus }) {
   return (
@@ -174,7 +161,7 @@ function PlaceDetails({
   distance,
   onClose,
 }: {
-  place: MapPlace;
+  place: Place;
   status: OpenStatus;
   distance?: number;
   onClose?: () => void;
@@ -269,7 +256,7 @@ const formatDistance = (distance?: number) => {
   return `${distance.toFixed(1)} km`;
 };
 
-export default function MapClient({ places }: { places: MapPlace[] }) {
+export default function MapClient({ places }: { places: Place[] }) {
   const [filter, setFilter] = useState("all");
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
