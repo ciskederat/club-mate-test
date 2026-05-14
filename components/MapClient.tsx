@@ -40,6 +40,45 @@ const filterOptions = [
   { value: "shop", label: "Supermarkten" },
 ];
 
+const defaultPlaceDetails: Record<string, Pick<Place, "address" | "hours">> = {
+  korsakov: {
+    address: "Sint-Jorispoort 1, 2000 Antwerpen",
+    hours: [
+      [{ open: "12:00", close: "02:00" }],
+      [{ open: "12:00", close: "02:00" }],
+      [{ open: "12:00", close: "03:00" }],
+      [{ open: "12:00", close: "03:00" }],
+      [{ open: "12:00", close: "03:00" }],
+      [{ open: "12:00", close: "04:00" }],
+      [{ open: "12:00", close: "04:00" }],
+    ],
+  },
+  ampere: {
+    address: "Simonsstraat 21, 2018 Antwerpen",
+    hours: [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [{ open: "23:00", close: "07:00" }],
+      [{ open: "23:00", close: "07:00" }],
+    ],
+  },
+  carrefour: {
+    address: "Beddenstraat 2, 2000 Antwerpen",
+    hours: [
+      [],
+      [{ open: "08:00", close: "20:00" }],
+      [{ open: "08:00", close: "20:00" }],
+      [{ open: "08:00", close: "20:00" }],
+      [{ open: "08:00", close: "20:00" }],
+      [{ open: "08:00", close: "21:00" }],
+      [{ open: "08:00", close: "20:00" }],
+    ],
+  },
+};
+
 const dayLabels = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
 const shortDayLabels = ["zo", "ma", "di", "wo", "do", "vr", "za"];
 const weekdayToIndex: Record<string, number> = {
@@ -344,7 +383,16 @@ export default function MapClient({ places }: { places: Place[] }) {
     };
   }, []);
 
-  const safePlaces = useMemo(() => (Array.isArray(places) ? places : []), [places]);
+  const safePlaces = useMemo(
+    () =>
+      (Array.isArray(places) ? places : []).map((place) => ({
+        ...defaultPlaceDetails[normalizeType(place.name)],
+        ...place,
+        address: place.address ?? defaultPlaceDetails[normalizeType(place.name)]?.address,
+        hours: place.hours ?? defaultPlaceDetails[normalizeType(place.name)]?.hours,
+      })),
+    [places],
+  );
   const normalizedFilter = useMemo(() => normalizeType(filter), [filter]);
   const placeStatuses = useMemo(
     () => new Map(safePlaces.map((place) => [place.name, getOpenStatus(place, now)])),
