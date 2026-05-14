@@ -550,7 +550,8 @@ export default function MapClient({ places }: { places: Place[] }) {
       return false;
     }
 
-    return window.sessionStorage.getItem(adminSessionStorageKey) === "true";
+    return window.sessionStorage.getItem(adminSessionStorageKey) === "true"
+      && Boolean(window.sessionStorage.getItem(adminSessionPasscodeKey));
   });
   const [editingPlaceName, setEditingPlaceName] = useState<string | null>(null);
   const [adminForm, setAdminForm] = useState<AdminPlaceForm>(() => createEmptyAdminForm());
@@ -790,14 +791,25 @@ export default function MapClient({ places }: { places: Place[] }) {
     setOpenNowOnly((currentValue) => !currentValue);
   };
 
+  const lockAdmin = (message = "Je beheersessie is verlopen. Vul je code opnieuw in.") => {
+    setIsAdminUnlocked(false);
+    setAdminPasscode("");
+    setAdminPasscodeInput("");
+    setAdminError(message);
+    window.sessionStorage.removeItem(adminSessionStorageKey);
+    window.sessionStorage.removeItem(adminSessionPasscodeKey);
+  };
+
   const unlockAdmin = async () => {
+    const pin = adminPasscodeInput.trim();
+
     try {
       const response = await fetch("/api/admin/session", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pin: adminPasscodeInput }),
+        body: JSON.stringify({ pin }),
       });
 
       const data = await response.json().catch(() => null);
@@ -808,11 +820,11 @@ export default function MapClient({ places }: { places: Place[] }) {
       }
 
       setIsAdminUnlocked(true);
-      setAdminPasscode(adminPasscodeInput);
+      setAdminPasscode(pin);
       setAdminError(null);
       setAdminPasscodeInput("");
       window.sessionStorage.setItem(adminSessionStorageKey, "true");
-      window.sessionStorage.setItem(adminSessionPasscodeKey, adminPasscodeInput);
+      window.sessionStorage.setItem(adminSessionPasscodeKey, pin);
     } catch {
       setAdminError("Beheer ontgrendelen is mislukt.");
     }
@@ -983,6 +995,11 @@ export default function MapClient({ places }: { places: Place[] }) {
       });
       const data = await response.json().catch(() => null);
 
+      if (response.status === 401) {
+        lockAdmin();
+        return;
+      }
+
       if (!response.ok || !data?.place) {
         setAdminError(data?.error ?? "Locatie opslaan is mislukt.");
         return;
@@ -1073,6 +1090,11 @@ export default function MapClient({ places }: { places: Place[] }) {
         body: JSON.stringify({ place, presentCount, absentCount }),
       });
       const data = await response.json().catch(() => null);
+
+      if (response.status === 401) {
+        lockAdmin();
+        return;
+      }
 
       if (!response.ok || !data?.place) {
         setAdminError(data?.error ?? "Tellers aanpassen is mislukt.");
