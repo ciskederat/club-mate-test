@@ -230,7 +230,7 @@ export default function MapClient({ places }: any) {
         )}
       </MapContainer>
       ) : (
-        <div className="absolute inset-0 overflow-auto bg-slate-50 p-4">
+        <div className="absolute inset-0 overflow-auto bg-slate-50 p-4 pt-24">
           <div className="max-w-4xl mx-auto space-y-4">
             {listPlaces.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-600">
