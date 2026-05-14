@@ -704,7 +704,15 @@ export default function MapClient({ places }: { places: Place[] }) {
       fetch(`/api/geocode/suggest?q=${encodeURIComponent(query)}`, {
         signal: controller.signal,
       })
-        .then((response) => response.json())
+        .then(async (response) => {
+          const contentType = response.headers.get("content-type") ?? "";
+
+          if (!contentType.includes("application/json")) {
+            throw new Error("NO_JSON");
+          }
+
+          return response.json();
+        })
         .then((data) => {
           setAddressSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
           setAddressSuggestionMessage(data.error ?? null);
@@ -712,7 +720,11 @@ export default function MapClient({ places }: { places: Place[] }) {
         .catch((error) => {
           if (error?.name !== "AbortError") {
             setAddressSuggestions([]);
-            setAddressSuggestionMessage("Suggesties ophalen is mislukt.");
+            setAddressSuggestionMessage(
+              error?.message === "NO_JSON"
+                ? "Suggestie-route niet gevonden. Redeploy de laatste versie op Vercel."
+                : "Suggesties ophalen is mislukt. Controleer je Geoapify key en redeploy.",
+            );
           }
         })
         .finally(() => {
