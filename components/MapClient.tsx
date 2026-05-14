@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import type { OpeningInterval, Place } from "@/data/places";
+import type { Place } from "@/data/places";
 
 const icon = new L.Icon({
   iconUrl: "/custom-pin.png",
@@ -133,7 +133,7 @@ const getOpenStatus = (place: Place, now: Date): OpenStatus => {
   };
 };
 
-const formatHours = (hours: OpeningInterval[][]) =>
+const formatHours = (hours: Place["hours"]) =>
   hours.map((intervals, index) => ({
     day: shortDayLabels[index],
     value: intervals.length === 0
