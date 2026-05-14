@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -48,13 +48,6 @@ const userIcon = new L.Icon({
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   className: "user-marker",
-});
-
-const adminDraftIcon = L.divIcon({
-  className: "",
-  html: '<div class="grid h-8 w-8 place-items-center rounded-full border-2 border-white bg-emerald-600 text-sm font-bold text-white shadow-lg">+</div>',
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
 });
 
 const filterOptions = [
@@ -134,6 +127,11 @@ type MateReport = {
 };
 
 type MateReports = Record<string, MateReport>;
+
+type PendingMateReport = {
+  placeName: string;
+  status: MateReportStatus;
+};
 
 const mateReportsStorageKey = "clubmate-map-reports";
 const adminPlacesStorageKey = "clubmate-map-admin-places";
@@ -405,38 +403,6 @@ function OpenBadge({ status }: { status: OpenStatus }) {
   );
 }
 
-function MapClickPicker({
-  active,
-  onPick,
-}: {
-  active: boolean;
-  onPick: (position: [number, number]) => void;
-}) {
-  useMapEvents({
-    click(event) {
-      if (!active) {
-        return;
-      }
-
-      onPick([event.latlng.lat, event.latlng.lng]);
-    },
-  });
-
-  return null;
-}
-
-function MapFocus({ position }: { position: [number, number] | null }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (position) {
-      map.flyTo(position, 16, { duration: 0.8 });
-    }
-  }, [map, position]);
-
-  return null;
-}
-
 function PlaceDetails({
   place,
   status,
@@ -491,14 +457,14 @@ function PlaceDetails({
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            className="rounded bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100"
+            className="min-h-11 rounded bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100"
             onClick={() => onMateReport(place.name, "present")}
           >
             Club Mate aanwezig
           </button>
           <button
             type="button"
-            className="rounded bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-100"
+            className="min-h-11 rounded bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-100"
             onClick={() => onMateReport(place.name, "absent")}
           >
             Niet meer aanwezig
@@ -529,7 +495,7 @@ function PlaceDetails({
       <div className="space-y-2">
         <button
           type="button"
-          className="flex w-full items-center justify-between rounded bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-200"
+          className="flex min-h-11 w-full items-center justify-between rounded bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-200"
           onClick={() => setHoursOpen((isOpen) => !isOpen)}
           aria-expanded={hoursOpen}
         >
@@ -596,15 +562,15 @@ export default function MapClient({ places }: { places: Place[] }) {
   });
   const [editingPlaceName, setEditingPlaceName] = useState<string | null>(null);
   const [adminForm, setAdminForm] = useState<AdminPlaceForm>(() => createEmptyAdminForm());
-  const [isPickingLocation, setIsPickingLocation] = useState(false);
-  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [isLoadingAddressSuggestions, setIsLoadingAddressSuggestions] = useState(false);
   const [addressSuggestionMessage, setAddressSuggestionMessage] = useState<string | null>(null);
+  const [addressSuggestionSelected, setAddressSuggestionSelected] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [selectedPlaceName, setSelectedPlaceName] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [pendingMateReport, setPendingMateReport] = useState<PendingMateReport | null>(null);
   const [mateReports, setMateReports] = useState<MateReports>(() => {
     if (typeof window === "undefined") {
       return {};
@@ -693,7 +659,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   useEffect(() => {
     const query = adminForm.address.trim();
 
-    if (!adminPanelOpen || !isAdminUnlocked || query.length < 3) {
+    if (!adminPanelOpen || !isAdminUnlocked || addressSuggestionSelected || query.length < 3) {
       return;
     }
 
@@ -738,9 +704,10 @@ export default function MapClient({ places }: { places: Place[] }) {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [adminForm.address, adminPanelOpen, isAdminUnlocked]);
+  }, [adminForm.address, adminPanelOpen, isAdminUnlocked, addressSuggestionSelected]);
 
-  const shouldShowAddressSuggestions = adminPanelOpen && isAdminUnlocked && adminForm.address.trim().length >= 3;
+  const shouldShowAddressSuggestions =
+    adminPanelOpen && isAdminUnlocked && !addressSuggestionSelected && adminForm.address.trim().length >= 3;
 
   const safePlaces = useMemo(
     () =>
@@ -793,20 +760,6 @@ export default function MapClient({ places }: { places: Place[] }) {
     if (!selectedPlace || !userLocation) return undefined;
     return getDistanceKm(userLocation, selectedPlace.position);
   }, [selectedPlace, userLocation]);
-  const adminDraftPosition = useMemo<[number, number] | null>(() => {
-    if (!adminForm.latitude.trim() || !adminForm.longitude.trim()) {
-      return null;
-    }
-
-    const latitude = Number(adminForm.latitude);
-    const longitude = Number(adminForm.longitude);
-
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      return null;
-    }
-
-    return [latitude, longitude];
-  }, [adminForm.latitude, adminForm.longitude]);
 
   const selectViewMode = (mode: "map" | "list") => {
     setSelectedPlaceName(null);
@@ -836,70 +789,19 @@ export default function MapClient({ places }: { places: Place[] }) {
   };
 
   const startAddingPlace = () => {
-    setIsPickingLocation(false);
     setEditingPlaceName(null);
     setAdminForm(createEmptyAdminForm());
+    setAddressSuggestionSelected(false);
+    setAddressSuggestions([]);
+    setAddressSuggestionMessage(null);
   };
 
   const startEditingPlace = (place: Place) => {
-    setIsPickingLocation(false);
     setEditingPlaceName(place.name);
     setAdminForm(createAdminFormFromPlace(place));
-  };
-
-  const startPickingLocation = () => {
-    setSelectedPlaceName(null);
-    setViewMode("map");
-    setAdminPanelOpen(false);
-    setIsPickingLocation(true);
-    setAdminError("Klik op de kaart om de locatie te kiezen.");
-  };
-
-  const handlePickedLocation = ([latitude, longitude]: [number, number]) => {
-    setAdminForm((form) => ({
-      ...form,
-      latitude: latitude.toFixed(6),
-      longitude: longitude.toFixed(6),
-    }));
-    setIsPickingLocation(false);
-    setAdminPanelOpen(true);
-    setAdminError("Locatie gekozen op de kaart.");
-  };
-
-  const searchAdminAddress = async () => {
-    const address = adminForm.address.trim();
-
-    if (!address) {
-      setAdminError("Vul eerst een adres in.");
-      return;
-    }
-
-    setIsSearchingAddress(true);
-    setAdminError("Adres zoeken...");
-
-    try {
-      const response = await fetch(`/api/geocode?q=${encodeURIComponent(address)}`);
-      const result = await response.json();
-
-      if (!response.ok) {
-        setAdminError(result.error ?? "Adres niet gevonden.");
-        return;
-      }
-
-      setAdminForm((form) => ({
-        ...form,
-        latitude: Number(result.latitude).toFixed(6),
-        longitude: Number(result.longitude).toFixed(6),
-      }));
-      setSelectedPlaceName(null);
-      setViewMode("map");
-      setAdminPanelOpen(false);
-      setAdminError("Adres gevonden op de kaart.");
-    } catch {
-      setAdminError("Adres zoeken is mislukt.");
-    } finally {
-      setIsSearchingAddress(false);
-    }
+    setAddressSuggestionSelected(true);
+    setAddressSuggestions([]);
+    setAddressSuggestionMessage(null);
   };
 
   const selectAddressSuggestion = (suggestion: AddressSuggestion) => {
@@ -910,10 +812,9 @@ export default function MapClient({ places }: { places: Place[] }) {
       longitude: suggestion.longitude.toFixed(6),
     }));
     setAddressSuggestions([]);
-    setSelectedPlaceName(null);
-    setViewMode("map");
-    setAdminPanelOpen(false);
-    setAdminError("Adres gekozen op de kaart.");
+    setAddressSuggestionMessage(null);
+    setAddressSuggestionSelected(true);
+    setAdminError("Adres gekozen.");
   };
 
   const updateAdminDayOpenStatus = (index: number, isOpen: boolean) => {
@@ -1020,12 +921,45 @@ export default function MapClient({ places }: { places: Place[] }) {
     }
   };
 
+  const updateMateReportCounts = (placeName: string, presentCount: number, absentCount: number) => {
+    const placeKey = normalizeType(placeName);
+    const existingReport = normalizeMateReport(mateReports[placeKey]) ?? {
+      presentCount: 0,
+      absentCount: 0,
+    };
+    const nextReports = {
+      ...mateReports,
+      [placeKey]: {
+        ...existingReport,
+        presentCount: Math.max(0, Math.floor(presentCount)),
+        absentCount: Math.max(0, Math.floor(absentCount)),
+      },
+    };
+
+    setMateReports(nextReports);
+
+    try {
+      window.localStorage.setItem(mateReportsStorageKey, JSON.stringify(nextReports));
+    } catch {
+      // The UI should still update even when storage is blocked.
+    }
+  };
+
+  const confirmPendingMateReport = () => {
+    if (!pendingMateReport) {
+      return;
+    }
+
+    reportMateStatus(pendingMateReport.placeName, pendingMateReport.status);
+    setPendingMateReport(null);
+  };
+
   return (
-    <div className="w-screen h-screen relative">
-      <div className="absolute top-4 left-4 z-[1000] flex flex-wrap gap-2 bg-white p-3 rounded-xl shadow">
+    <div className="relative h-dvh w-screen overflow-hidden">
+      <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-wrap justify-center gap-2 rounded-xl bg-white p-2 shadow sm:left-4 sm:right-auto sm:top-4 sm:justify-start sm:p-3">
         <button
           type="button"
-          className={`rounded px-3 py-1 text-sm transition ${
+          className={`min-h-10 rounded px-3 py-2 text-sm transition sm:min-h-0 sm:py-1 ${
             viewMode === "map"
               ? "bg-slate-900 text-white"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1036,7 +970,7 @@ export default function MapClient({ places }: { places: Place[] }) {
         </button>
         <button
           type="button"
-          className={`rounded px-3 py-1 text-sm transition ${
+          className={`min-h-10 rounded px-3 py-2 text-sm transition sm:min-h-0 sm:py-1 ${
             viewMode === "list"
               ? "bg-slate-900 text-white"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1047,7 +981,7 @@ export default function MapClient({ places }: { places: Place[] }) {
         </button>
         <button
           type="button"
-          className={`rounded px-3 py-1 text-sm transition ${
+          className={`min-h-10 rounded px-3 py-2 text-sm transition sm:min-h-0 sm:py-1 ${
             adminPanelOpen
               ? "bg-slate-900 text-white"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1061,13 +995,13 @@ export default function MapClient({ places }: { places: Place[] }) {
         </button>
       </div>
 
-      <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2 bg-white p-3 rounded-xl shadow">
-        <div className="flex flex-wrap gap-2">
+      <div className="absolute left-3 right-3 top-[4.75rem] z-[1000] flex flex-col gap-2 rounded-xl bg-white p-2 shadow sm:left-auto sm:right-4 sm:top-4 sm:p-3">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
           {filterOptions.map((option) => (
             <button
               key={option.value}
               type="button"
-              className={`rounded px-3 py-1 text-sm transition ${
+              className={`min-h-10 rounded px-2 py-2 text-sm transition sm:min-h-0 sm:px-3 sm:py-1 ${
                 filter === option.value
                   ? "bg-slate-900 text-white"
                   : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1080,7 +1014,7 @@ export default function MapClient({ places }: { places: Place[] }) {
         </div>
         <button
           type="button"
-          className={`flex items-center justify-center gap-2 rounded px-3 py-1 text-sm transition ${
+          className={`flex min-h-10 items-center justify-center gap-2 rounded px-3 py-2 text-sm transition sm:min-h-0 sm:py-1 ${
             openNowOnly
               ? "bg-emerald-600 text-white"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1096,43 +1030,8 @@ export default function MapClient({ places }: { places: Place[] }) {
         </button>
       </div>
 
-      {isPickingLocation && (
-        <div className="absolute bottom-4 left-4 right-4 z-[1000] mx-auto flex max-w-lg items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-          <div>
-            <div className="text-sm font-semibold text-slate-900">Klik op de kaart</div>
-            <div className="text-sm text-slate-600">De gekozen plek wordt ingevuld in het beheerformulier.</div>
-          </div>
-          <button
-            type="button"
-            className="rounded bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
-            onClick={() => {
-              setIsPickingLocation(false);
-              setAdminPanelOpen(true);
-            }}
-          >
-            Annuleer
-          </button>
-        </div>
-      )}
-
-      {!adminPanelOpen && isAdminUnlocked && adminDraftPosition && !isPickingLocation && (
-        <div className="absolute bottom-4 left-4 right-4 z-[1000] mx-auto flex max-w-lg items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-          <div>
-            <div className="text-sm font-semibold text-slate-900">Locatie aangeduid</div>
-            <div className="text-sm text-slate-600">Controleer de pin en keer terug naar beheer om op te slaan.</div>
-          </div>
-          <button
-            type="button"
-            className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
-            onClick={() => setAdminPanelOpen(true)}
-          >
-            Terug naar beheer
-          </button>
-        </div>
-      )}
-
       {adminPanelOpen && (
-        <div className="absolute left-4 right-4 top-20 z-[1000] mx-auto max-h-[calc(100vh-7rem)] max-w-3xl overflow-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+        <div className="fixed inset-x-0 bottom-0 top-32 z-[1000] overflow-auto rounded-t-xl border border-slate-200 bg-white p-4 shadow-xl sm:absolute sm:bottom-auto sm:left-4 sm:right-4 sm:top-20 sm:mx-auto sm:max-h-[calc(100dvh-7rem)] sm:max-w-3xl sm:rounded-xl sm:p-5">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Beheer</div>
@@ -1140,7 +1039,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             </div>
             <button
               type="button"
-              className="grid h-8 w-8 place-items-center rounded bg-slate-100 text-slate-700 transition hover:bg-slate-200"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-slate-700 transition hover:bg-slate-200 sm:h-8 sm:w-8"
               onClick={() => setAdminPanelOpen(false)}
               aria-label="Sluit beheer"
             >
@@ -1154,7 +1053,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                 <span className="text-sm font-medium text-slate-700">Beheer-code</span>
                 <input
                   type="password"
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
                   value={adminPasscodeInput}
                   onChange={(event) => setAdminPasscodeInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -1167,7 +1066,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               {adminError && <div className="text-sm text-rose-600">{adminError}</div>}
               <button
                 type="button"
-                className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                className="min-h-11 rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
                 onClick={unlockAdmin}
               >
                 Ontgrendel beheer
@@ -1178,7 +1077,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               <div className="space-y-3">
                 <button
                   type="button"
-                  className="w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                  className="min-h-11 w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
                   onClick={startAddingPlace}
                 >
                   Nieuwe locatie
@@ -1188,7 +1087,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                     <button
                       key={place.name}
                       type="button"
-                      className={`w-full rounded border px-3 py-2 text-left text-sm transition ${
+                      className={`min-h-12 w-full rounded border px-3 py-2 text-left text-sm transition ${
                         normalizeType(editingPlaceName) === normalizeType(place.name)
                           ? "border-slate-900 bg-slate-100 text-slate-950"
                           : "border-slate-200 text-slate-700 hover:bg-slate-50"
@@ -1214,7 +1113,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                     <span className="text-sm font-medium text-slate-700">Naam</span>
                     <input
                       type="text"
-                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
                       value={adminForm.name}
                       onChange={(event) => setAdminForm((form) => ({ ...form, name: event.target.value }))}
                     />
@@ -1222,7 +1121,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                   <label className="block space-y-1">
                     <span className="text-sm font-medium text-slate-700">Type</span>
                     <select
-                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
                       value={adminForm.type}
                       onChange={(event) => setAdminForm((form) => ({ ...form, type: event.target.value as Place["type"] }))}
                     >
@@ -1236,12 +1135,13 @@ export default function MapClient({ places }: { places: Place[] }) {
                   <span className="text-sm font-medium text-slate-700">Adres</span>
                   <input
                     type="text"
-                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
                     value={adminForm.address}
                     onChange={(event) => {
                       setAdminForm((form) => ({ ...form, address: event.target.value }));
                       setAdminError(null);
                       setAddressSuggestionMessage(null);
+                      setAddressSuggestionSelected(false);
                     }}
                   />
                 </label>
@@ -1258,7 +1158,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                       <button
                         key={`${suggestion.latitude}-${suggestion.longitude}-${suggestion.label}`}
                         type="button"
-                        className="block w-full border-t border-slate-100 px-3 py-2 text-left text-sm text-slate-700 transition first:border-t-0 hover:bg-slate-50"
+                        className="block w-full border-t border-slate-100 px-3 py-3 text-left text-sm text-slate-700 transition first:border-t-0 hover:bg-slate-50"
                         onClick={() => selectAddressSuggestion(suggestion)}
                       >
                         {suggestion.label}
@@ -1267,50 +1167,10 @@ export default function MapClient({ places }: { places: Place[] }) {
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  className="rounded bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={searchAdminAddress}
-                  disabled={isSearchingAddress}
-                >
-                  {isSearchingAddress ? "Adres zoeken..." : "Zoek adres op kaart"}
-                </button>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-1">
-                    <span className="text-sm font-medium text-slate-700">Latitude</span>
-                    <input
-                      type="number"
-                      step="any"
-                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                      value={adminForm.latitude}
-                      onChange={(event) => setAdminForm((form) => ({ ...form, latitude: event.target.value }))}
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-sm font-medium text-slate-700">Longitude</span>
-                    <input
-                      type="number"
-                      step="any"
-                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
-                      value={adminForm.longitude}
-                      onChange={(event) => setAdminForm((form) => ({ ...form, longitude: event.target.value }))}
-                    />
-                  </label>
-                </div>
-
-                <button
-                  type="button"
-                  className="rounded bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
-                  onClick={startPickingLocation}
-                >
-                  Kies op kaart
-                </button>
-
                 <label className="block space-y-1">
                   <span className="text-sm font-medium text-slate-700">Info</span>
                   <textarea
-                    className="min-h-20 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    className="min-h-20 w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
                     value={adminForm.info}
                     onChange={(event) => setAdminForm((form) => ({ ...form, info: event.target.value }))}
                   />
@@ -1328,7 +1188,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                           <label className="block space-y-1">
                             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
                             <select
-                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                              className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
                               value={dayHours.isOpen ? "open" : "closed"}
                               onChange={(event) => updateAdminDayOpenStatus(index, event.target.value === "open")}
                             >
@@ -1339,7 +1199,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                           <label className="block space-y-1">
                             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Van</span>
                             <select
-                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-400"
+                              className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm disabled:bg-slate-100 disabled:text-slate-400"
                               value={dayHours.open}
                               disabled={!dayHours.isOpen}
                               onChange={(event) => updateAdminDayTime(index, "open", event.target.value)}
@@ -1352,7 +1212,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                           <label className="block space-y-1">
                             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tot</span>
                             <select
-                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-400"
+                              className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm disabled:bg-slate-100 disabled:text-slate-400"
                               value={dayHours.close}
                               disabled={!dayHours.isOpen}
                               onChange={(event) => updateAdminDayTime(index, "close", event.target.value)}
@@ -1368,6 +1228,53 @@ export default function MapClient({ places }: { places: Place[] }) {
                   </div>
                 </div>
 
+                {adminForm.name.trim() && (
+                  <div className="space-y-3 rounded border border-slate-200 p-3">
+                    <div>
+                      <div className="text-sm font-medium text-slate-700">Voorraadmeldingen</div>
+                      <div className="text-xs text-slate-500">Pas deze tellers aan als er per ongeluk verkeerd gemeld is.</div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-1">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aanwezig gemeld</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          value={mateReports[normalizeType(adminForm.name)]?.presentCount ?? 0}
+                          onChange={(event) => {
+                            const currentReport = mateReports[normalizeType(adminForm.name)];
+                            updateMateReportCounts(
+                              adminForm.name,
+                              Number(event.target.value),
+                              currentReport?.absentCount ?? 0,
+                            );
+                          }}
+                        />
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Niet aanwezig gemeld</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          value={mateReports[normalizeType(adminForm.name)]?.absentCount ?? 0}
+                          onChange={(event) => {
+                            const currentReport = mateReports[normalizeType(adminForm.name)];
+                            updateMateReportCounts(
+                              adminForm.name,
+                              currentReport?.presentCount ?? 0,
+                              Number(event.target.value),
+                            );
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+
                 {adminError && (
                   <div className={`text-sm ${adminError === "Locatie opgeslagen." ? "text-emerald-700" : "text-rose-600"}`}>
                     {adminError}
@@ -1376,7 +1283,7 @@ export default function MapClient({ places }: { places: Place[] }) {
 
                 <button
                   type="submit"
-                  className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                  className="min-h-11 w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 sm:w-auto"
                 >
                   Locatie opslaan
                 </button>
@@ -1388,8 +1295,6 @@ export default function MapClient({ places }: { places: Place[] }) {
 
       {viewMode === "map" ? (
         <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full" zoomControl={false}>
-        <MapClickPicker active={isPickingLocation} onPick={handlePickedLocation} />
-        <MapFocus position={adminDraftPosition} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
@@ -1402,11 +1307,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             position={place.position}
             icon={icon}
             eventHandlers={{
-              click: () => {
-                if (!isPickingLocation) {
-                  setSelectedPlaceName(place.name);
-                }
-              },
+              click: () => setSelectedPlaceName(place.name),
             }}
           />
         ))}
@@ -1417,14 +1318,9 @@ export default function MapClient({ places }: { places: Place[] }) {
           </Marker>
         )}
 
-        {isAdminUnlocked && adminDraftPosition && (
-          <Marker position={adminDraftPosition} icon={adminDraftIcon}>
-            <Popup>Nieuwe/gewijzigde locatie</Popup>
-          </Marker>
-        )}
       </MapContainer>
       ) : (
-        <div className="absolute inset-0 overflow-auto bg-slate-50 p-4 pt-24">
+        <div className="absolute inset-0 overflow-auto bg-slate-50 p-3 pt-36 sm:p-4 sm:pt-24">
           <div className="max-w-4xl mx-auto space-y-4">
             {listPlaces.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-600">
@@ -1438,15 +1334,15 @@ export default function MapClient({ places }: { places: Place[] }) {
                 <button
                   key={place.name}
                   type="button"
-                  className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-900 sm:p-5"
                   onClick={() => setSelectedPlaceName(place.name)}
                 >
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <div>
                       <div className="text-lg font-semibold text-slate-900">{place.name}</div>
                       <div className="text-sm text-slate-500">{typeLabel(place.type)}</div>
                     </div>
-                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+                    <div className="w-fit rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
                       {formatDistance(place.distance)}
                     </div>
                   </div>
@@ -1463,16 +1359,43 @@ export default function MapClient({ places }: { places: Place[] }) {
       )}
 
       {selectedPlace && (
-        <div className="absolute bottom-4 left-4 right-4 z-[1000] mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl md:left-auto md:right-4">
+        <div className="absolute bottom-3 left-3 right-3 z-[1000] mx-auto max-h-[70dvh] max-w-md overflow-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl sm:bottom-4 sm:left-4 sm:right-4 sm:p-5 md:left-auto md:right-4">
           <PlaceDetails
             key={selectedPlace.name}
             place={selectedPlace}
             status={placeStatuses.get(selectedPlace.name) ?? getOpenStatus(selectedPlace, now)}
             distance={selectedPlaceDistance}
             mateReport={mateReports[normalizeType(selectedPlace.name)]}
-            onMateReport={reportMateStatus}
+            onMateReport={(placeName, status) => setPendingMateReport({ placeName, status })}
             onClose={() => setSelectedPlaceName(null)}
           />
+        </div>
+      )}
+
+      {pendingMateReport && (
+        <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
+            <div className="text-lg font-semibold text-slate-950">Melding bevestigen</div>
+            <div className="mt-2 text-sm text-slate-600">
+              Wil je melden dat bij {pendingMateReport.placeName} {reportStatusLabel(pendingMateReport.status).toLowerCase()} is?
+            </div>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="min-h-11 rounded bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+                onClick={() => setPendingMateReport(null)}
+              >
+                Annuleer
+              </button>
+              <button
+                type="button"
+                className="min-h-11 rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                onClick={confirmPendingMateReport}
+              >
+                Bevestigen
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
