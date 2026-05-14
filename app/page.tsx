@@ -1,9 +1,11 @@
 import Map from "@/components/Map";
-import { places } from "@/data/places";
+import { getPlaces } from "@/lib/placesDatabase";
 
-export default function Home() {
+export default async function Home() {
+  const places = await getPlaces();
+
   return (
-    <main className="w-screen h-screen">
+    <main className="h-dvh w-screen">
       <Map places={places} />
     </main>
   );

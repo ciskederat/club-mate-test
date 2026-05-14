@@ -1,0 +1,62 @@
+import type { Place } from "@/data/placeTypes";
+import { savePlace, updateReportCounts } from "@/lib/placesDatabase";
+
+const isValidAdminPin = (request: Request) => {
+  const pin = request.headers.get("x-admin-pin");
+  return Boolean(process.env.ADMIN_PIN) && pin === process.env.ADMIN_PIN;
+};
+
+export async function POST(request: Request) {
+  if (!isValidAdminPin(request)) {
+    return Response.json({ error: "Niet toegelaten." }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => null) as {
+    place?: Place;
+    previousName?: string;
+  } | null;
+
+  if (!body?.place) {
+    return Response.json({ error: "Locatie ontbreekt." }, { status: 400 });
+  }
+
+  const place = await savePlace({
+    id: body.place.id,
+    previousName: body.previousName,
+    place: body.place,
+  }).catch(() => null);
+
+  if (!place) {
+    return Response.json({ error: "Database opslaan is mislukt." }, { status: 500 });
+  }
+
+  return Response.json({ place });
+}
+
+export async function PATCH(request: Request) {
+  if (!isValidAdminPin(request)) {
+    return Response.json({ error: "Niet toegelaten." }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => null) as {
+    place?: Place;
+    presentCount?: number;
+    absentCount?: number;
+  } | null;
+
+  if (!body?.place) {
+    return Response.json({ error: "Locatie ontbreekt." }, { status: 400 });
+  }
+
+  const place = await updateReportCounts(
+    body.place,
+    Number(body.presentCount ?? body.place.presentCount ?? 0),
+    Number(body.absentCount ?? body.place.absentCount ?? 0),
+  ).catch(() => null);
+
+  if (!place) {
+    return Response.json({ error: "Tellers aanpassen is mislukt." }, { status: 500 });
+  }
+
+  return Response.json({ place });
+}

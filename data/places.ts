@@ -1,16 +1,4 @@
-type OpeningInterval = {
-  open: string;
-  close: string;
-};
-
-type Place = {
-  name: string;
-  position: [number, number];
-  info: string;
-  type: "cafe" | "shop";
-  address: string;
-  hours: OpeningInterval[][];
-};
+import type { Place } from "./placeTypes";
 
 export const places: Place[] = [
   {
