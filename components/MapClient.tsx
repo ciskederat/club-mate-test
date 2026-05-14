@@ -40,6 +40,7 @@ export default function MapClient({ places }: any) {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "prompt" | "granted" | "denied" | "unavailable">("idle");
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -52,69 +53,65 @@ export default function MapClient({ places }: any) {
       return;
     }
 
+    const updatePosition = (position: GeolocationPosition) => {
+      const { latitude, longitude } = position.coords;
+      setUserLocation([latitude, longitude]);
+      setLocationStatus("granted");
+      setLocationError(null);
+    };
+
+    const handleError = (error: GeolocationPositionError) => {
+      setUserLocation(null);
+      if (error.code === 1) {
+        setLocationStatus("denied");
+        setLocationError("Toestemming geweigerd. Controleer Safari instellingen en laad de pagina opnieuw.");
+      } else if (error.code === 2) {
+        setLocationStatus("denied");
+        setLocationError("Locatie niet beschikbaar.");
+      } else if (error.code === 3) {
+        setLocationStatus("denied");
+        setLocationError("Timeout bij ophalen locatie.");
+      } else {
+        setLocationStatus("denied");
+        setLocationError(error.message || "Locatie niet beschikbaar");
+      }
+    };
+
+    const startWatch = () => {
+      setLocationStatus("prompt");
+      setLocationError(null);
+      return navigator.geolocation.watchPosition(updatePosition, handleError, {
+        enableHighAccuracy: false,
+        timeout: 15000,
+        maximumAge: 0,
+      });
+    };
+
+    let watchId: number | null = null;
+
     if (navigator.permissions?.query) {
       navigator.permissions
         .query({ name: "geolocation" as PermissionName })
         .then((permissionStatus) => {
-          if (permissionStatus.state === "granted") {
-            requestLocation();
-          } else if (permissionStatus.state === "denied") {
+          if (permissionStatus.state === "denied") {
             setLocationStatus("denied");
           } else {
-            setLocationStatus("idle");
+            watchId = startWatch();
           }
         })
         .catch(() => {
-          // Safari may not support permissions query reliably; fall back to manual request.
-          setLocationStatus("idle");
+          watchId = startWatch();
         });
     } else {
-      setLocationStatus("idle");
+      watchId = startWatch();
     }
+
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
   }, []);
-
-  const requestLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationStatus("unavailable");
-      setLocationError("Geolocatie niet ondersteund");
-      return;
-    }
-
-    setLocationStatus("prompt");
-    setLocationError(null);
-
-    const timeoutId = window.setTimeout(() => {
-      setLocationStatus("denied");
-      setLocationError("Timeout bij ophalen locatie");
-    }, 10000);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        clearTimeout(timeoutId);
-        const { latitude, longitude } = position.coords;
-        setUserLocation([latitude, longitude]);
-        setLocationStatus("granted");
-      },
-      (error) => {
-        clearTimeout(timeoutId);
-        setUserLocation(null);
-        if (error.code === 1) {
-          setLocationStatus("denied");
-          setLocationError("Toestemming geweigerd. Controleer Safari instellingen en laad de pagina opnieuw.");
-        } else if (error.code === 2) {
-          setLocationStatus("denied");
-          setLocationError("Locatie niet beschikbaar.");
-        } else if (error.code === 3) {
-          setLocationStatus("denied");
-          setLocationError("Timeout bij ophalen locatie.");
-        } else {
-          setLocationStatus("denied");
-          setLocationError(error.message || "Locatie niet beschikbaar");
-        }
-      },
-      { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 },
-    );
-  };
 
   const safePlaces = useMemo(() => (Array.isArray(places) ? places : []), [places]);
   const normalizedFilter = useMemo(() => normalizeType(filter), [filter]);
@@ -148,14 +145,15 @@ export default function MapClient({ places }: any) {
         ))}
         <button
           type="button"
-          className="rounded px-3 py-1 text-sm bg-slate-100 text-slate-800 hover:bg-slate-200"
-          onClick={requestLocation}
+          className="rounded px-3 py-1 text-sm bg-slate-900 text-white hover:bg-slate-800"
+          onClick={() => setShowInfoPanel((open) => !open)}
         >
-          {locationStatus === "denied" ? "Opnieuw locatie vragen" : "Locatie vragen"}
+          {showInfoPanel ? "Verberg info" : "Toon info"}
         </button>
       </div>
 
-      <div className="absolute bottom-4 left-4 z-[1000] bg-white p-3 rounded-xl shadow text-sm text-slate-700">
+      {showInfoPanel && (
+        <div className="absolute bottom-4 left-4 z-[1000] w-[min(320px,calc(100vw-2rem))] bg-white p-3 rounded-xl shadow text-sm text-slate-700">
         <div>
           <strong>Filter:</strong> {filter}
         </div>
@@ -189,6 +187,7 @@ export default function MapClient({ places }: any) {
           </div>
         )}
       </div>
+      )}
 
       <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full">
         <TileLayer
