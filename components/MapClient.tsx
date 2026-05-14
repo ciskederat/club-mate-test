@@ -48,6 +48,7 @@ export default function MapClient({ places }: any) {
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationStatus("unavailable");
+      setLocationError("Geolocatie niet ondersteund");
       return;
     }
 
@@ -59,11 +60,16 @@ export default function MapClient({ places }: any) {
             requestLocation();
           } else if (permissionStatus.state === "denied") {
             setLocationStatus("denied");
+          } else {
+            setLocationStatus("idle");
           }
         })
         .catch(() => {
           // Safari may not support permissions query reliably; fall back to manual request.
+          setLocationStatus("idle");
         });
+    } else {
+      setLocationStatus("idle");
     }
   }, []);
 
@@ -92,10 +98,21 @@ export default function MapClient({ places }: any) {
       (error) => {
         clearTimeout(timeoutId);
         setUserLocation(null);
-        setLocationStatus("denied");
-        setLocationError(error.message || "Locatie niet beschikbaar");
+        if (error.code === 1) {
+          setLocationStatus("denied");
+          setLocationError("Toestemming geweigerd. Controleer Safari instellingen en laad de pagina opnieuw.");
+        } else if (error.code === 2) {
+          setLocationStatus("denied");
+          setLocationError("Locatie niet beschikbaar.");
+        } else if (error.code === 3) {
+          setLocationStatus("denied");
+          setLocationError("Timeout bij ophalen locatie.");
+        } else {
+          setLocationStatus("denied");
+          setLocationError(error.message || "Locatie niet beschikbaar");
+        }
       },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 },
     );
   };
 
@@ -134,7 +151,7 @@ export default function MapClient({ places }: any) {
           className="rounded px-3 py-1 text-sm bg-slate-100 text-slate-800 hover:bg-slate-200"
           onClick={requestLocation}
         >
-          Locatie vragen
+          {locationStatus === "denied" ? "Opnieuw locatie vragen" : "Locatie vragen"}
         </button>
       </div>
 
@@ -161,6 +178,11 @@ export default function MapClient({ places }: any) {
           <strong>Je locatie:</strong>{" "}
           {userLocation ? `✓ ${userLocation[0].toFixed(3)}, ${userLocation[1].toFixed(3)}` : "✗ Niet beschikbaar"}
         </div>
+        {locationStatus === "denied" && (
+          <div className="mt-2 text-xs text-slate-500">
+            Safari kan geolocatie alleen opnieuw proberen na een pagina-refresh als toestemming in de browserinstellingen is gewijzigd.
+          </div>
+        )}
         {locationError && (
           <div className="text-red-600">
             <strong>Fout:</strong> {locationError}
