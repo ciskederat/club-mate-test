@@ -4,20 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-
-type OpeningInterval = {
-  open: string;
-  close: string;
-};
-
-type Place = {
-  name: string;
-  position: [number, number];
-  info: string;
-  type: "cafe" | "shop";
-  address?: string;
-  hours?: OpeningInterval[][];
-};
+import type { MateReportStatus, OpeningInterval, Place } from "@/data/placeTypes";
 
 type AdminPlaceForm = {
   name: string;
@@ -117,8 +104,6 @@ type OpenStatus = {
   label: string;
 };
 
-type MateReportStatus = "present" | "absent";
-
 type MateReport = {
   lastStatus?: MateReportStatus;
   lastReportedAt?: string;
@@ -134,9 +119,8 @@ type PendingMateReport = {
 };
 
 const mateReportsStorageKey = "clubmate-map-reports";
-const adminPlacesStorageKey = "clubmate-map-admin-places";
 const adminSessionStorageKey = "clubmate-map-admin-unlocked";
-const adminPasscode = process.env.NEXT_PUBLIC_ADMIN_PIN ?? "clubmate";
+const adminSessionPasscodeKey = "clubmate-map-admin-code";
 
 const normalizeType = (value: unknown) =>
   value
@@ -217,25 +201,6 @@ const getAdminDayHoursValue = (value: string) => {
     open: match?.[1] ?? "09:00",
     close: match?.[2] ?? "18:00",
   };
-};
-
-const loadStoredPlaces = () => {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const storedPlaces = window.localStorage.getItem(adminPlacesStorageKey);
-
-    if (!storedPlaces) {
-      return null;
-    }
-
-    const parsedPlaces = JSON.parse(storedPlaces);
-    return Array.isArray(parsedPlaces) ? parsedPlaces as Place[] : null;
-  } catch {
-    return null;
-  }
 };
 
 const parseTime = (time: string) => {
@@ -369,6 +334,26 @@ const normalizeMateReport = (value: unknown): MateReport | undefined => {
   return {
     lastStatus,
     lastReportedAt,
+    presentCount,
+    absentCount,
+  };
+};
+
+const getMateReportFromPlace = (place?: Place | null): MateReport | undefined => {
+  if (!place) {
+    return undefined;
+  }
+
+  const presentCount = normalizeReportCount(place.presentCount);
+  const absentCount = normalizeReportCount(place.absentCount);
+
+  if (!place.lastReportStatus && !place.lastReportedAt && presentCount === 0 && absentCount === 0) {
+    return undefined;
+  }
+
+  return {
+    lastStatus: place.lastReportStatus,
+    lastReportedAt: place.lastReportedAt,
     presentCount,
     absentCount,
   };
@@ -549,9 +534,16 @@ const formatDistance = (distance?: number) => {
 export default function MapClient({ places }: { places: Place[] }) {
   const [filter, setFilter] = useState("all");
   const [openNowOnly, setOpenNowOnly] = useState(false);
-  const [adminPlaces, setAdminPlaces] = useState<Place[] | null>(() => loadStoredPlaces());
+  const [databasePlaces, setDatabasePlaces] = useState<Place[]>(() => Array.isArray(places) ? places : []);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [adminPasscodeInput, setAdminPasscodeInput] = useState("");
+  const [adminPasscode, setAdminPasscode] = useState(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    return window.sessionStorage.getItem(adminSessionPasscodeKey) ?? "";
+  });
   const [adminError, setAdminError] = useState<string | null>(null);
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(() => {
     if (typeof window === "undefined") {
@@ -562,6 +554,9 @@ export default function MapClient({ places }: { places: Place[] }) {
   });
   const [editingPlaceName, setEditingPlaceName] = useState<string | null>(null);
   const [adminForm, setAdminForm] = useState<AdminPlaceForm>(() => createEmptyAdminForm());
+  const [quickHoursScope, setQuickHoursScope] = useState<"all" | "weekdays" | "weekend">("weekdays");
+  const [quickHoursOpen, setQuickHoursOpen] = useState("09:00");
+  const [quickHoursClose, setQuickHoursClose] = useState("18:00");
   const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [isLoadingAddressSuggestions, setIsLoadingAddressSuggestions] = useState(false);
   const [addressSuggestionMessage, setAddressSuggestionMessage] = useState<string | null>(null);
@@ -571,7 +566,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [selectedPlaceName, setSelectedPlaceName] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [pendingMateReport, setPendingMateReport] = useState<PendingMateReport | null>(null);
-  const [mateReports, setMateReports] = useState<MateReports>(() => {
+  const [localMateReports, setLocalMateReports] = useState<MateReports>(() => {
     if (typeof window === "undefined") {
       return {};
     }
@@ -599,6 +594,25 @@ export default function MapClient({ places }: { places: Place[] }) {
       return {};
     }
   });
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch("/api/places", { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        if (Array.isArray(data?.places)) {
+          setDatabasePlaces(data.places);
+        }
+      })
+      .catch(() => {
+        // The server-rendered list stays visible if a refresh fails.
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -711,13 +725,13 @@ export default function MapClient({ places }: { places: Place[] }) {
 
   const safePlaces = useMemo(
     () =>
-      (adminPlaces ?? (Array.isArray(places) ? places : [])).map((place) => ({
+      databasePlaces.map((place) => ({
         ...defaultPlaceDetails[normalizeType(place.name)],
         ...place,
         address: place.address ?? defaultPlaceDetails[normalizeType(place.name)]?.address,
         hours: place.hours ?? defaultPlaceDetails[normalizeType(place.name)]?.hours,
       })),
-    [adminPlaces, places],
+    [databasePlaces],
   );
   const normalizedFilter = useMemo(() => normalizeType(filter), [filter]);
   const placeStatuses = useMemo(
@@ -776,16 +790,32 @@ export default function MapClient({ places }: { places: Place[] }) {
     setOpenNowOnly((currentValue) => !currentValue);
   };
 
-  const unlockAdmin = () => {
-    if (adminPasscodeInput !== adminPasscode) {
-      setAdminError("Code klopt niet.");
-      return;
-    }
+  const unlockAdmin = async () => {
+    try {
+      const response = await fetch("/api/admin/session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pin: adminPasscodeInput }),
+      });
 
-    setIsAdminUnlocked(true);
-    setAdminError(null);
-    setAdminPasscodeInput("");
-    window.sessionStorage.setItem(adminSessionStorageKey, "true");
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setAdminError(data?.error ?? "Code klopt niet.");
+        return;
+      }
+
+      setIsAdminUnlocked(true);
+      setAdminPasscode(adminPasscodeInput);
+      setAdminError(null);
+      setAdminPasscodeInput("");
+      window.sessionStorage.setItem(adminSessionStorageKey, "true");
+      window.sessionStorage.setItem(adminSessionPasscodeKey, adminPasscodeInput);
+    } catch {
+      setAdminError("Beheer ontgrendelen is mislukt.");
+    }
   };
 
   const startAddingPlace = () => {
@@ -849,15 +879,66 @@ export default function MapClient({ places }: { places: Place[] }) {
     }));
   };
 
-  const persistAdminPlaces = (nextPlaces: Place[]) => {
-    setAdminPlaces(nextPlaces);
-    window.localStorage.setItem(adminPlacesStorageKey, JSON.stringify(nextPlaces));
+  const getQuickHoursIndexes = (scope: typeof quickHoursScope) => {
+    if (scope === "weekdays") return [1, 2, 3, 4, 5];
+    if (scope === "weekend") return [0, 6];
+    return [0, 1, 2, 3, 4, 5, 6];
   };
 
-  const saveAdminPlace = () => {
+  const applyQuickHours = () => {
+    const selectedIndexes = new Set(getQuickHoursIndexes(quickHoursScope));
+
+    setAdminForm((currentForm) => ({
+      ...currentForm,
+      dayHours: currentForm.dayHours.map((value, index) =>
+        selectedIndexes.has(index) ? `${quickHoursOpen}-${quickHoursClose}` : value,
+      ),
+    }));
+  };
+
+  const closeQuickHours = () => {
+    const selectedIndexes = new Set(getQuickHoursIndexes(quickHoursScope));
+
+    setAdminForm((currentForm) => ({
+      ...currentForm,
+      dayHours: currentForm.dayHours.map((value, index) => selectedIndexes.has(index) ? "" : value),
+    }));
+  };
+
+  const applyHoursPreset = (preset: "supermarket" | "cafe" | "club" | "closed") => {
+    const presetHours: Record<typeof preset, string[]> = {
+      supermarket: ["", "08:00-20:00", "08:00-20:00", "08:00-20:00", "08:00-20:00", "08:00-21:00", "08:00-20:00"],
+      cafe: ["12:00-02:00", "12:00-02:00", "12:00-03:00", "12:00-03:00", "12:00-03:00", "12:00-04:00", "12:00-04:00"],
+      club: ["", "", "", "", "", "23:00-07:00", "23:00-07:00"],
+      closed: createEmptyHours(),
+    };
+
+    setAdminForm((currentForm) => ({
+      ...currentForm,
+      dayHours: presetHours[preset],
+    }));
+  };
+
+  const updatePlaceInState = (updatedPlace: Place, fallbackName?: string) => {
+    setDatabasePlaces((currentPlaces) => {
+      const updatedKey = normalizeType(fallbackName ?? updatedPlace.name);
+      const existingIndex = currentPlaces.findIndex((place) =>
+        (updatedPlace.id && place.id === updatedPlace.id) || normalizeType(place.name) === updatedKey,
+      );
+
+      if (existingIndex < 0) {
+        return [...currentPlaces, updatedPlace].sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      return currentPlaces.map((place, index) => index === existingIndex ? updatedPlace : place);
+    });
+  };
+
+  const saveAdminPlace = async () => {
     const latitude = Number(adminForm.latitude);
     const longitude = Number(adminForm.longitude);
     const parsedHours = parseAdminHours(adminForm.dayHours);
+    const editingPlace = safePlaces.find((place) => normalizeType(place.name) === normalizeType(editingPlaceName));
 
     if (!adminForm.name.trim()) {
       setAdminError("Naam is verplicht.");
@@ -875,82 +956,142 @@ export default function MapClient({ places }: { places: Place[] }) {
     }
 
     const nextPlace: Place = {
+      id: editingPlace?.id,
       name: adminForm.name.trim(),
       type: adminForm.type,
       position: [latitude, longitude],
       info: adminForm.info.trim() || "Club Mate verkrijgbaar",
       address: adminForm.address.trim(),
       hours: parsedHours,
+      presentCount: editingPlace?.presentCount ?? 0,
+      absentCount: editingPlace?.absentCount ?? 0,
+      lastReportStatus: editingPlace?.lastReportStatus,
+      lastReportedAt: editingPlace?.lastReportedAt,
     };
-    const sourcePlaces = adminPlaces ?? safePlaces;
-    const editingKey = normalizeType(editingPlaceName ?? nextPlace.name);
-    const existingIndex = sourcePlaces.findIndex((place) => normalizeType(place.name) === editingKey);
-    const nextPlaces = existingIndex >= 0
-      ? sourcePlaces.map((place, index) => index === existingIndex ? nextPlace : place)
-      : [...sourcePlaces, nextPlace];
 
-    persistAdminPlaces(nextPlaces);
-    setSelectedPlaceName(nextPlace.name);
-    setEditingPlaceName(nextPlace.name);
-    setAdminError("Locatie opgeslagen.");
+    try {
+      const response = await fetch("/api/admin/places", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-pin": adminPasscode,
+        },
+        body: JSON.stringify({
+          place: nextPlace,
+          previousName: editingPlaceName,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.place) {
+        setAdminError(data?.error ?? "Locatie opslaan is mislukt.");
+        return;
+      }
+
+      updatePlaceInState(data.place, editingPlaceName ?? nextPlace.name);
+      setSelectedPlaceName(data.place.name);
+      setEditingPlaceName(data.place.name);
+      setAdminForm(createAdminFormFromPlace(data.place));
+      setAdminError("Locatie opgeslagen.");
+    } catch {
+      setAdminError("Locatie opslaan is mislukt.");
+    }
   };
 
-  const reportMateStatus = (placeName: string, status: MateReportStatus) => {
+  const updateLocalMateReport = (placeName: string, updater: (report: MateReport) => MateReport) => {
     const placeKey = normalizeType(placeName);
-    const existingReport = normalizeMateReport(mateReports[placeKey]) ?? {
+    const existingReport = normalizeMateReport(localMateReports[placeKey]) ?? {
       presentCount: 0,
       absentCount: 0,
     };
     const nextReports = {
-      ...mateReports,
-      [placeKey]: {
+      ...localMateReports,
+      [placeKey]: updater(existingReport),
+    };
+
+    setLocalMateReports(nextReports);
+
+    try {
+      window.localStorage.setItem(mateReportsStorageKey, JSON.stringify(nextReports));
+    } catch {
+      // The UI should still update even when storage is blocked.
+    }
+  };
+
+  const getMateReport = (placeName: string) => {
+    const place = safePlaces.find((candidatePlace) => normalizeType(candidatePlace.name) === normalizeType(placeName));
+    return getMateReportFromPlace(place) ?? localMateReports[normalizeType(placeName)];
+  };
+
+  const reportMateStatus = async (placeName: string, status: MateReportStatus) => {
+    const place = safePlaces.find((candidatePlace) => normalizeType(candidatePlace.name) === normalizeType(placeName));
+
+    if (!place) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/places/report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ place, status }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.place) {
+        throw new Error("REPORT_FAILED");
+      }
+
+      updatePlaceInState(data.place, place.name);
+    } catch {
+      updateLocalMateReport(placeName, (existingReport) => ({
         ...existingReport,
         lastStatus: status,
         lastReportedAt: new Date().toISOString(),
         presentCount: existingReport.presentCount + (status === "present" ? 1 : 0),
         absentCount: existingReport.absentCount + (status === "absent" ? 1 : 0),
-      },
-    };
-
-    setMateReports(nextReports);
-
-    try {
-      window.localStorage.setItem(mateReportsStorageKey, JSON.stringify(nextReports));
-    } catch {
-      // The UI should still update even when storage is blocked.
+      }));
     }
   };
 
-  const updateMateReportCounts = (placeName: string, presentCount: number, absentCount: number) => {
-    const placeKey = normalizeType(placeName);
-    const existingReport = normalizeMateReport(mateReports[placeKey]) ?? {
-      presentCount: 0,
-      absentCount: 0,
-    };
-    const nextReports = {
-      ...mateReports,
-      [placeKey]: {
-        ...existingReport,
-        presentCount: Math.max(0, Math.floor(presentCount)),
-        absentCount: Math.max(0, Math.floor(absentCount)),
-      },
-    };
+  const updateMateReportCounts = async (placeName: string, presentCount: number, absentCount: number) => {
+    const place = safePlaces.find((candidatePlace) => normalizeType(candidatePlace.name) === normalizeType(placeName));
 
-    setMateReports(nextReports);
+    if (!place) {
+      return;
+    }
 
     try {
-      window.localStorage.setItem(mateReportsStorageKey, JSON.stringify(nextReports));
+      const response = await fetch("/api/admin/places", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-pin": adminPasscode,
+        },
+        body: JSON.stringify({ place, presentCount, absentCount }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.place) {
+        setAdminError(data?.error ?? "Tellers aanpassen is mislukt.");
+        return;
+      }
+
+      updatePlaceInState(data.place, place.name);
+      setAdminError("Tellers aangepast.");
     } catch {
-      // The UI should still update even when storage is blocked.
+      setAdminError("Tellers aanpassen is mislukt.");
     }
   };
 
-  const confirmPendingMateReport = () => {
+  const confirmPendingMateReport = async () => {
     if (!pendingMateReport) {
       return;
     }
 
-    reportMateStatus(pendingMateReport.placeName, pendingMateReport.status);
+    await reportMateStatus(pendingMateReport.placeName, pendingMateReport.status);
     setPendingMateReport(null);
   };
 
@@ -1178,6 +1319,91 @@ export default function MapClient({ places }: { places: Place[] }) {
 
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-slate-700">Openingsuren</div>
+                  <div className="space-y-3 rounded border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Snel invullen</div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <button
+                        type="button"
+                        className="min-h-10 rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                        onClick={() => applyHoursPreset("supermarket")}
+                      >
+                        Supermarkt
+                      </button>
+                      <button
+                        type="button"
+                        className="min-h-10 rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                        onClick={() => applyHoursPreset("cafe")}
+                      >
+                        Café
+                      </button>
+                      <button
+                        type="button"
+                        className="min-h-10 rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                        onClick={() => applyHoursPreset("club")}
+                      >
+                        Club
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto_auto] sm:items-end">
+                      <label className="block space-y-1">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dagen</span>
+                        <select
+                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          value={quickHoursScope}
+                          onChange={(event) => setQuickHoursScope(event.target.value as typeof quickHoursScope)}
+                        >
+                          <option value="all">Alle dagen</option>
+                          <option value="weekdays">Ma-vr</option>
+                          <option value="weekend">Weekend</option>
+                        </select>
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Van</span>
+                        <select
+                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          value={quickHoursOpen}
+                          onChange={(event) => setQuickHoursOpen(event.target.value)}
+                        >
+                          {timeOptions.map((time) => (
+                            <option key={time} value={time}>{time}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tot</span>
+                        <select
+                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          value={quickHoursClose}
+                          onChange={(event) => setQuickHoursClose(event.target.value)}
+                        >
+                          {timeOptions.map((time) => (
+                            <option key={time} value={time}>{time}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="min-h-11 rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                        onClick={applyQuickHours}
+                      >
+                        Toepassen
+                      </button>
+                      <button
+                        type="button"
+                        className="min-h-11 rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                        onClick={closeQuickHours}
+                      >
+                        Gesloten
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="min-h-10 w-full rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 sm:w-auto"
+                      onClick={() => applyHoursPreset("closed")}
+                    >
+                      Alles leegmaken
+                    </button>
+                  </div>
                   <div className="grid gap-3">
                     {shortDayLabels.map((day, index) => {
                       const dayHours = getAdminDayHoursValue(adminForm.dayHours[index]);
@@ -1242,9 +1468,9 @@ export default function MapClient({ places }: { places: Place[] }) {
                           min="0"
                           step="1"
                           className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
-                          value={mateReports[normalizeType(adminForm.name)]?.presentCount ?? 0}
+                          value={getMateReport(adminForm.name)?.presentCount ?? 0}
                           onChange={(event) => {
-                            const currentReport = mateReports[normalizeType(adminForm.name)];
+                            const currentReport = getMateReport(adminForm.name);
                             updateMateReportCounts(
                               adminForm.name,
                               Number(event.target.value),
@@ -1260,9 +1486,9 @@ export default function MapClient({ places }: { places: Place[] }) {
                           min="0"
                           step="1"
                           className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
-                          value={mateReports[normalizeType(adminForm.name)]?.absentCount ?? 0}
+                          value={getMateReport(adminForm.name)?.absentCount ?? 0}
                           onChange={(event) => {
-                            const currentReport = mateReports[normalizeType(adminForm.name)];
+                            const currentReport = getMateReport(adminForm.name);
                             updateMateReportCounts(
                               adminForm.name,
                               currentReport?.presentCount ?? 0,
@@ -1276,7 +1502,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                 )}
 
                 {adminError && (
-                  <div className={`text-sm ${adminError === "Locatie opgeslagen." ? "text-emerald-700" : "text-rose-600"}`}>
+                  <div className={`text-sm ${adminError === "Locatie opgeslagen." || adminError === "Tellers aangepast." || adminError === "Adres gekozen." ? "text-emerald-700" : "text-rose-600"}`}>
                     {adminError}
                   </div>
                 )}
@@ -1365,7 +1591,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             place={selectedPlace}
             status={placeStatuses.get(selectedPlace.name) ?? getOpenStatus(selectedPlace, now)}
             distance={selectedPlaceDistance}
-            mateReport={mateReports[normalizeType(selectedPlace.name)]}
+            mateReport={getMateReport(selectedPlace.name)}
             onMateReport={(placeName, status) => setPendingMateReport({ placeName, status })}
             onClose={() => setSelectedPlaceName(null)}
           />
