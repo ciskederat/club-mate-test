@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -19,6 +19,22 @@ type Place = {
   hours?: OpeningInterval[][];
 };
 
+type AdminPlaceForm = {
+  name: string;
+  type: Place["type"];
+  latitude: string;
+  longitude: string;
+  info: string;
+  address: string;
+  dayHours: string[];
+};
+
+type AddressSuggestion = {
+  label: string;
+  latitude: number;
+  longitude: number;
+};
+
 const icon = new L.Icon({
   iconUrl: "/custom-pin.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -32,6 +48,13 @@ const userIcon = new L.Icon({
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   className: "user-marker",
+});
+
+const adminDraftIcon = L.divIcon({
+  className: "",
+  html: '<div class="grid h-8 w-8 place-items-center rounded-full border-2 border-white bg-emerald-600 text-sm font-bold text-white shadow-lg">+</div>',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
 });
 
 const filterOptions = [
@@ -101,6 +124,22 @@ type OpenStatus = {
   label: string;
 };
 
+type MateReportStatus = "present" | "absent";
+
+type MateReport = {
+  lastStatus?: MateReportStatus;
+  lastReportedAt?: string;
+  presentCount: number;
+  absentCount: number;
+};
+
+type MateReports = Record<string, MateReport>;
+
+const mateReportsStorageKey = "clubmate-map-reports";
+const adminPlacesStorageKey = "clubmate-map-admin-places";
+const adminSessionStorageKey = "clubmate-map-admin-unlocked";
+const adminPasscode = process.env.NEXT_PUBLIC_ADMIN_PIN ?? "clubmate";
+
 const normalizeType = (value: unknown) =>
   value
     ?.toString()
@@ -108,6 +147,98 @@ const normalizeType = (value: unknown) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim() ?? "";
+
+const createEmptyHours = () => Array.from({ length: 7 }, () => "");
+const timeOptions = Array.from({ length: 48 }, (_, index) => {
+  const hours = Math.floor(index / 2).toString().padStart(2, "0");
+  const minutes = index % 2 === 0 ? "00" : "30";
+  return `${hours}:${minutes}`;
+});
+
+const createEmptyAdminForm = (): AdminPlaceForm => ({
+  name: "",
+  type: "cafe",
+  latitude: "",
+  longitude: "",
+  info: "Club Mate verkrijgbaar",
+  address: "",
+  dayHours: createEmptyHours(),
+});
+
+const formatHoursForAdmin = (hours: Place["hours"]) =>
+  shortDayLabels.map((_, index) => {
+    const intervals = hours?.[index] ?? [];
+    return intervals.map((interval) => `${interval.open}-${interval.close}`).join(", ");
+  });
+
+const createAdminFormFromPlace = (place: Place): AdminPlaceForm => ({
+  name: place.name,
+  type: place.type,
+  latitude: String(place.position[0]),
+  longitude: String(place.position[1]),
+  info: place.info,
+  address: place.address ?? "",
+  dayHours: formatHoursForAdmin(place.hours),
+});
+
+const parseAdminDayHours = (value: string): OpeningInterval[] | null => {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue || normalizeType(trimmedValue) === "gesloten") {
+    return [];
+  }
+
+  const intervals = trimmedValue.split(",").map((part) => part.trim()).filter(Boolean);
+  const parsedIntervals = intervals.map((interval) => {
+    const match = interval.match(/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/);
+    return match ? { open: match[1], close: match[2] } : null;
+  });
+
+  if (parsedIntervals.some((interval) => interval === null)) {
+    return null;
+  }
+
+  return parsedIntervals as OpeningInterval[];
+};
+
+const parseAdminHours = (values: string[]) => {
+  const parsedHours = values.map(parseAdminDayHours);
+
+  if (parsedHours.some((hours) => hours === null)) {
+    return null;
+  }
+
+  return parsedHours as OpeningInterval[][];
+};
+
+const getAdminDayHoursValue = (value: string) => {
+  const match = value.match(/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/);
+
+  return {
+    isOpen: Boolean(match),
+    open: match?.[1] ?? "09:00",
+    close: match?.[2] ?? "18:00",
+  };
+};
+
+const loadStoredPlaces = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const storedPlaces = window.localStorage.getItem(adminPlacesStorageKey);
+
+    if (!storedPlaces) {
+      return null;
+    }
+
+    const parsedPlaces = JSON.parse(storedPlaces);
+    return Array.isArray(parsedPlaces) ? parsedPlaces as Place[] : null;
+  } catch {
+    return null;
+  }
+};
 
 const parseTime = (time: string) => {
   const [hours, minutes] = time.split(":").map(Number);
@@ -202,6 +333,66 @@ const formatHours = (hours: Place["hours"]) =>
 
 const typeLabel = (type: Place["type"]) => (type === "cafe" ? "Café" : "Supermarkt");
 
+const reportStatusLabel = (status: MateReportStatus) =>
+  status === "present" ? "Club Mate aanwezig" : "Niet meer aanwezig";
+
+const isMateReportStatus = (value: unknown): value is MateReportStatus =>
+  value === "present" || value === "absent";
+
+const normalizeReportCount = (value: unknown) => {
+  const count = Number(value);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+};
+
+const normalizeMateReport = (value: unknown): MateReport | undefined => {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const report = value as Partial<MateReport> & {
+    status?: unknown;
+    reportedAt?: unknown;
+  };
+  const oldStatus = isMateReportStatus(report.status) ? report.status : undefined;
+  const lastStatus = isMateReportStatus(report.lastStatus) ? report.lastStatus : oldStatus;
+  const lastReportedAt =
+    typeof report.lastReportedAt === "string"
+      ? report.lastReportedAt
+      : typeof report.reportedAt === "string"
+        ? report.reportedAt
+        : undefined;
+  const presentCount = normalizeReportCount(report.presentCount) + (oldStatus === "present" ? 1 : 0);
+  const absentCount = normalizeReportCount(report.absentCount) + (oldStatus === "absent" ? 1 : 0);
+
+  if (!lastStatus && presentCount === 0 && absentCount === 0) {
+    return undefined;
+  }
+
+  return {
+    lastStatus,
+    lastReportedAt,
+    presentCount,
+    absentCount,
+  };
+};
+
+const formatReportDate = (value: string) => {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "onbekend";
+  }
+
+  return new Intl.DateTimeFormat("nl-BE", {
+    timeZone: placeTimeZone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+};
+
 function OpenBadge({ status }: { status: OpenStatus }) {
   return (
     <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
@@ -214,15 +405,51 @@ function OpenBadge({ status }: { status: OpenStatus }) {
   );
 }
 
+function MapClickPicker({
+  active,
+  onPick,
+}: {
+  active: boolean;
+  onPick: (position: [number, number]) => void;
+}) {
+  useMapEvents({
+    click(event) {
+      if (!active) {
+        return;
+      }
+
+      onPick([event.latlng.lat, event.latlng.lng]);
+    },
+  });
+
+  return null;
+}
+
+function MapFocus({ position }: { position: [number, number] | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (position) {
+      map.flyTo(position, 16, { duration: 0.8 });
+    }
+  }, [map, position]);
+
+  return null;
+}
+
 function PlaceDetails({
   place,
   status,
   distance,
+  mateReport,
+  onMateReport,
   onClose,
 }: {
   place: Place;
   status: OpenStatus;
   distance?: number;
+  mateReport?: MateReport;
+  onMateReport: (placeName: string, status: MateReportStatus) => void;
   onClose?: () => void;
 }) {
   const [hoursOpen, setHoursOpen] = useState(false);
@@ -257,6 +484,39 @@ function PlaceDetails({
       <div className="space-y-1">
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Info</div>
         <div className="text-sm text-slate-800">{place.info}</div>
+      </div>
+
+      <div className="space-y-2 rounded border border-slate-200 p-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Club Mate voorraad</div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            className="rounded bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100"
+            onClick={() => onMateReport(place.name, "present")}
+          >
+            Club Mate aanwezig
+          </button>
+          <button
+            type="button"
+            className="rounded bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-100"
+            onClick={() => onMateReport(place.name, "absent")}
+          >
+            Niet meer aanwezig
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded bg-slate-50 px-3 py-2 text-slate-700">
+            Aanwezig gemeld: <span className="font-semibold">{mateReport?.presentCount ?? 0}</span>
+          </div>
+          <div className="rounded bg-slate-50 px-3 py-2 text-slate-700">
+            Niet aanwezig: <span className="font-semibold">{mateReport?.absentCount ?? 0}</span>
+          </div>
+        </div>
+        <div className="text-sm text-slate-600">
+          {mateReport?.lastStatus && mateReport.lastReportedAt
+            ? `Laatst gemeld: ${reportStatusLabel(mateReport.lastStatus)} op ${formatReportDate(mateReport.lastReportedAt)}`
+            : "Nog geen melding doorgegeven."}
+        </div>
       </div>
 
       {distance != null && (
@@ -322,10 +582,56 @@ const formatDistance = (distance?: number) => {
 
 export default function MapClient({ places }: { places: Place[] }) {
   const [filter, setFilter] = useState("all");
+  const [openNowOnly, setOpenNowOnly] = useState(false);
+  const [adminPlaces, setAdminPlaces] = useState<Place[] | null>(() => loadStoredPlaces());
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [adminPasscodeInput, setAdminPasscodeInput] = useState("");
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.sessionStorage.getItem(adminSessionStorageKey) === "true";
+  });
+  const [editingPlaceName, setEditingPlaceName] = useState<string | null>(null);
+  const [adminForm, setAdminForm] = useState<AdminPlaceForm>(() => createEmptyAdminForm());
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [isLoadingAddressSuggestions, setIsLoadingAddressSuggestions] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [selectedPlaceName, setSelectedPlaceName] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [mateReports, setMateReports] = useState<MateReports>(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+
+    try {
+      const storedReports = window.localStorage.getItem(mateReportsStorageKey);
+
+      if (!storedReports) {
+        return {};
+      }
+
+      const parsedReports = JSON.parse(storedReports);
+
+      if (!parsedReports || typeof parsedReports !== "object") {
+        return {};
+      }
+
+      return Object.fromEntries(
+        Object.entries(parsedReports).flatMap(([placeKey, report]) => {
+          const normalizedReport = normalizeMateReport(report);
+          return normalizedReport ? [[placeKey, normalizedReport]] : [];
+        }),
+      );
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -383,15 +689,53 @@ export default function MapClient({ places }: { places: Place[] }) {
     };
   }, []);
 
+  useEffect(() => {
+    const query = adminForm.address.trim();
+
+    if (!adminPanelOpen || !isAdminUnlocked || query.length < 3) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setIsLoadingAddressSuggestions(true);
+
+      fetch(`/api/geocode/suggest?q=${encodeURIComponent(query)}`, {
+        signal: controller.signal,
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          setAddressSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+        })
+        .catch((error) => {
+          if (error?.name !== "AbortError") {
+            setAddressSuggestions([]);
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setIsLoadingAddressSuggestions(false);
+          }
+        });
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [adminForm.address, adminPanelOpen, isAdminUnlocked]);
+
+  const shouldShowAddressSuggestions = adminPanelOpen && isAdminUnlocked && adminForm.address.trim().length >= 3;
+
   const safePlaces = useMemo(
     () =>
-      (Array.isArray(places) ? places : []).map((place) => ({
+      (adminPlaces ?? (Array.isArray(places) ? places : [])).map((place) => ({
         ...defaultPlaceDetails[normalizeType(place.name)],
         ...place,
         address: place.address ?? defaultPlaceDetails[normalizeType(place.name)]?.address,
         hours: place.hours ?? defaultPlaceDetails[normalizeType(place.name)]?.hours,
       })),
-    [places],
+    [adminPlaces, places],
   );
   const normalizedFilter = useMemo(() => normalizeType(filter), [filter]);
   const placeStatuses = useMemo(
@@ -399,20 +743,22 @@ export default function MapClient({ places }: { places: Place[] }) {
     [safePlaces, now],
   );
 
-  const visiblePlaces = useMemo(
-    () =>
-      normalizedFilter === "all"
-        ? safePlaces
-        : safePlaces.filter((place) => normalizeType(place.type) === normalizedFilter),
-    [safePlaces, normalizedFilter],
-  );
-
-  const listPlaces = useMemo(() => {
-    const filtered = normalizedFilter === "all"
+  const filteredPlaces = useMemo(() => {
+    const placesByType = normalizedFilter === "all"
       ? safePlaces
       : safePlaces.filter((place) => normalizeType(place.type) === normalizedFilter);
 
-    return filtered
+    if (!openNowOnly) {
+      return placesByType;
+    }
+
+    return placesByType.filter((place) => placeStatuses.get(place.name)?.isOpen);
+  }, [safePlaces, normalizedFilter, openNowOnly, placeStatuses]);
+
+  const visiblePlaces = filteredPlaces;
+
+  const listPlaces = useMemo(() => {
+    return filteredPlaces
       .map((place) => ({
         ...place,
         distance: userLocation ? getDistanceKm(userLocation, place.position) : undefined,
@@ -422,7 +768,7 @@ export default function MapClient({ places }: { places: Place[] }) {
         if (b.distance == null) return -1;
         return a.distance - b.distance;
       });
-  }, [safePlaces, normalizedFilter, userLocation]);
+  }, [filteredPlaces, userLocation]);
 
   const selectedPlace = useMemo(
     () => safePlaces.find((place) => place.name === selectedPlaceName) ?? null,
@@ -432,6 +778,16 @@ export default function MapClient({ places }: { places: Place[] }) {
     if (!selectedPlace || !userLocation) return undefined;
     return getDistanceKm(userLocation, selectedPlace.position);
   }, [selectedPlace, userLocation]);
+  const adminDraftPosition = useMemo<[number, number] | null>(() => {
+    const latitude = Number(adminForm.latitude);
+    const longitude = Number(adminForm.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+
+    return [latitude, longitude];
+  }, [adminForm.latitude, adminForm.longitude]);
 
   const selectViewMode = (mode: "map" | "list") => {
     setSelectedPlaceName(null);
@@ -441,6 +797,208 @@ export default function MapClient({ places }: { places: Place[] }) {
   const selectFilter = (value: string) => {
     setSelectedPlaceName(null);
     setFilter(value);
+  };
+
+  const toggleOpenNowOnly = () => {
+    setSelectedPlaceName(null);
+    setOpenNowOnly((currentValue) => !currentValue);
+  };
+
+  const unlockAdmin = () => {
+    if (adminPasscodeInput !== adminPasscode) {
+      setAdminError("Code klopt niet.");
+      return;
+    }
+
+    setIsAdminUnlocked(true);
+    setAdminError(null);
+    setAdminPasscodeInput("");
+    window.sessionStorage.setItem(adminSessionStorageKey, "true");
+  };
+
+  const startAddingPlace = () => {
+    setIsPickingLocation(false);
+    setEditingPlaceName(null);
+    setAdminForm(createEmptyAdminForm());
+  };
+
+  const startEditingPlace = (place: Place) => {
+    setIsPickingLocation(false);
+    setEditingPlaceName(place.name);
+    setAdminForm(createAdminFormFromPlace(place));
+  };
+
+  const startPickingLocation = () => {
+    setSelectedPlaceName(null);
+    setViewMode("map");
+    setAdminPanelOpen(false);
+    setIsPickingLocation(true);
+    setAdminError("Klik op de kaart om de locatie te kiezen.");
+  };
+
+  const handlePickedLocation = ([latitude, longitude]: [number, number]) => {
+    setAdminForm((form) => ({
+      ...form,
+      latitude: latitude.toFixed(6),
+      longitude: longitude.toFixed(6),
+    }));
+    setIsPickingLocation(false);
+    setAdminPanelOpen(true);
+    setAdminError("Locatie gekozen op de kaart.");
+  };
+
+  const searchAdminAddress = async () => {
+    const address = adminForm.address.trim();
+
+    if (!address) {
+      setAdminError("Vul eerst een adres in.");
+      return;
+    }
+
+    setIsSearchingAddress(true);
+    setAdminError("Adres zoeken...");
+
+    try {
+      const response = await fetch(`/api/geocode?q=${encodeURIComponent(address)}`);
+      const result = await response.json();
+
+      if (!response.ok) {
+        setAdminError(result.error ?? "Adres niet gevonden.");
+        return;
+      }
+
+      setAdminForm((form) => ({
+        ...form,
+        latitude: Number(result.latitude).toFixed(6),
+        longitude: Number(result.longitude).toFixed(6),
+      }));
+      setSelectedPlaceName(null);
+      setViewMode("map");
+      setAdminPanelOpen(false);
+      setAdminError("Adres gevonden op de kaart.");
+    } catch {
+      setAdminError("Adres zoeken is mislukt.");
+    } finally {
+      setIsSearchingAddress(false);
+    }
+  };
+
+  const selectAddressSuggestion = (suggestion: AddressSuggestion) => {
+    setAdminForm((form) => ({
+      ...form,
+      address: suggestion.label,
+      latitude: suggestion.latitude.toFixed(6),
+      longitude: suggestion.longitude.toFixed(6),
+    }));
+    setAddressSuggestions([]);
+    setSelectedPlaceName(null);
+    setViewMode("map");
+    setAdminPanelOpen(false);
+    setAdminError("Adres gekozen op de kaart.");
+  };
+
+  const updateAdminDayOpenStatus = (index: number, isOpen: boolean) => {
+    setAdminForm((currentForm) => ({
+      ...currentForm,
+      dayHours: currentForm.dayHours.map((dayValue, dayIndex) => {
+        if (dayIndex !== index) {
+          return dayValue;
+        }
+
+        if (!isOpen) {
+          return "";
+        }
+
+        const dayHours = getAdminDayHoursValue(dayValue);
+        return `${dayHours.open}-${dayHours.close}`;
+      }),
+    }));
+  };
+
+  const updateAdminDayTime = (index: number, field: "open" | "close", value: string) => {
+    setAdminForm((currentForm) => ({
+      ...currentForm,
+      dayHours: currentForm.dayHours.map((dayValue, dayIndex) => {
+        if (dayIndex !== index) {
+          return dayValue;
+        }
+
+        const dayHours = getAdminDayHoursValue(dayValue);
+        return field === "open" ? `${value}-${dayHours.close}` : `${dayHours.open}-${value}`;
+      }),
+    }));
+  };
+
+  const persistAdminPlaces = (nextPlaces: Place[]) => {
+    setAdminPlaces(nextPlaces);
+    window.localStorage.setItem(adminPlacesStorageKey, JSON.stringify(nextPlaces));
+  };
+
+  const saveAdminPlace = () => {
+    const latitude = Number(adminForm.latitude);
+    const longitude = Number(adminForm.longitude);
+    const parsedHours = parseAdminHours(adminForm.dayHours);
+
+    if (!adminForm.name.trim()) {
+      setAdminError("Naam is verplicht.");
+      return;
+    }
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setAdminError("Latitude en longitude moeten geldige nummers zijn.");
+      return;
+    }
+
+    if (!parsedHours) {
+      setAdminError("Gebruik openingsuren zoals 12:00-18:00, of laat leeg voor gesloten.");
+      return;
+    }
+
+    const nextPlace: Place = {
+      name: adminForm.name.trim(),
+      type: adminForm.type,
+      position: [latitude, longitude],
+      info: adminForm.info.trim() || "Club Mate verkrijgbaar",
+      address: adminForm.address.trim(),
+      hours: parsedHours,
+    };
+    const sourcePlaces = adminPlaces ?? safePlaces;
+    const editingKey = normalizeType(editingPlaceName ?? nextPlace.name);
+    const existingIndex = sourcePlaces.findIndex((place) => normalizeType(place.name) === editingKey);
+    const nextPlaces = existingIndex >= 0
+      ? sourcePlaces.map((place, index) => index === existingIndex ? nextPlace : place)
+      : [...sourcePlaces, nextPlace];
+
+    persistAdminPlaces(nextPlaces);
+    setSelectedPlaceName(nextPlace.name);
+    setEditingPlaceName(nextPlace.name);
+    setAdminError("Locatie opgeslagen.");
+  };
+
+  const reportMateStatus = (placeName: string, status: MateReportStatus) => {
+    const placeKey = normalizeType(placeName);
+    const existingReport = normalizeMateReport(mateReports[placeKey]) ?? {
+      presentCount: 0,
+      absentCount: 0,
+    };
+    const nextReports = {
+      ...mateReports,
+      [placeKey]: {
+        ...existingReport,
+        lastStatus: status,
+        lastReportedAt: new Date().toISOString(),
+        presentCount: existingReport.presentCount + (status === "present" ? 1 : 0),
+        absentCount: existingReport.absentCount + (status === "absent" ? 1 : 0),
+      },
+    };
+
+    setMateReports(nextReports);
+
+    try {
+      window.localStorage.setItem(mateReportsStorageKey, JSON.stringify(nextReports));
+    } catch {
+      // The UI should still update even when storage is blocked.
+    }
   };
 
   return (
@@ -468,27 +1026,347 @@ export default function MapClient({ places }: { places: Place[] }) {
         >
           Lijst
         </button>
+        <button
+          type="button"
+          className={`rounded px-3 py-1 text-sm transition ${
+            adminPanelOpen
+              ? "bg-slate-900 text-white"
+              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+          }`}
+          onClick={() => {
+            setSelectedPlaceName(null);
+            setAdminPanelOpen((isOpen) => !isOpen);
+          }}
+        >
+          Beheer
+        </button>
       </div>
 
-      <div className="absolute top-4 right-4 z-[1000] flex flex-wrap gap-2 bg-white p-3 rounded-xl shadow">
-        {filterOptions.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={`rounded px-3 py-1 text-sm transition ${
-              filter === option.value
-                ? "bg-slate-900 text-white"
-                : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-            }`}
-            onClick={() => selectFilter(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2 bg-white p-3 rounded-xl shadow">
+        <div className="flex flex-wrap gap-2">
+          {filterOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`rounded px-3 py-1 text-sm transition ${
+                filter === option.value
+                  ? "bg-slate-900 text-white"
+                  : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+              }`}
+              onClick={() => selectFilter(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className={`flex items-center justify-center gap-2 rounded px-3 py-1 text-sm transition ${
+            openNowOnly
+              ? "bg-emerald-600 text-white"
+              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+          }`}
+          onClick={toggleOpenNowOnly}
+          aria-pressed={openNowOnly}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${openNowOnly ? "bg-white" : "bg-slate-400"}`}
+            aria-hidden="true"
+          />
+          Nu open
+        </button>
       </div>
+
+      {isPickingLocation && (
+        <div className="absolute bottom-4 left-4 right-4 z-[1000] mx-auto flex max-w-lg items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">Klik op de kaart</div>
+            <div className="text-sm text-slate-600">De gekozen plek wordt ingevuld in het beheerformulier.</div>
+          </div>
+          <button
+            type="button"
+            className="rounded bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+            onClick={() => {
+              setIsPickingLocation(false);
+              setAdminPanelOpen(true);
+            }}
+          >
+            Annuleer
+          </button>
+        </div>
+      )}
+
+      {!adminPanelOpen && isAdminUnlocked && adminDraftPosition && !isPickingLocation && (
+        <div className="absolute bottom-4 left-4 right-4 z-[1000] mx-auto flex max-w-lg items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">Locatie aangeduid</div>
+            <div className="text-sm text-slate-600">Controleer de pin en keer terug naar beheer om op te slaan.</div>
+          </div>
+          <button
+            type="button"
+            className="rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+            onClick={() => setAdminPanelOpen(true)}
+          >
+            Terug naar beheer
+          </button>
+        </div>
+      )}
+
+      {adminPanelOpen && (
+        <div className="absolute left-4 right-4 top-20 z-[1000] mx-auto max-h-[calc(100vh-7rem)] max-w-3xl overflow-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Beheer</div>
+              <div className="text-xl font-semibold text-slate-950">Locaties aanpassen</div>
+            </div>
+            <button
+              type="button"
+              className="grid h-8 w-8 place-items-center rounded bg-slate-100 text-slate-700 transition hover:bg-slate-200"
+              onClick={() => setAdminPanelOpen(false)}
+              aria-label="Sluit beheer"
+            >
+              ×
+            </button>
+          </div>
+
+          {!isAdminUnlocked ? (
+            <div className="space-y-3">
+              <label className="block space-y-1">
+                <span className="text-sm font-medium text-slate-700">Beheer-code</span>
+                <input
+                  type="password"
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                  value={adminPasscodeInput}
+                  onChange={(event) => setAdminPasscodeInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      unlockAdmin();
+                    }
+                  }}
+                />
+              </label>
+              {adminError && <div className="text-sm text-rose-600">{adminError}</div>}
+              <button
+                type="button"
+                className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                onClick={unlockAdmin}
+              >
+                Ontgrendel beheer
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  className="w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                  onClick={startAddingPlace}
+                >
+                  Nieuwe locatie
+                </button>
+                <div className="space-y-2">
+                  {safePlaces.map((place) => (
+                    <button
+                      key={place.name}
+                      type="button"
+                      className={`w-full rounded border px-3 py-2 text-left text-sm transition ${
+                        normalizeType(editingPlaceName) === normalizeType(place.name)
+                          ? "border-slate-900 bg-slate-100 text-slate-950"
+                          : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                      }`}
+                      onClick={() => startEditingPlace(place)}
+                    >
+                      <span className="block font-medium">{place.name}</span>
+                      <span className="text-xs text-slate-500">{typeLabel(place.type)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <form
+                className="space-y-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveAdminPlace();
+                }}
+              >
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-slate-700">Naam</span>
+                    <input
+                      type="text"
+                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      value={adminForm.name}
+                      onChange={(event) => setAdminForm((form) => ({ ...form, name: event.target.value }))}
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-slate-700">Type</span>
+                    <select
+                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      value={adminForm.type}
+                      onChange={(event) => setAdminForm((form) => ({ ...form, type: event.target.value as Place["type"] }))}
+                    >
+                      <option value="cafe">Café</option>
+                      <option value="shop">Supermarkt</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-slate-700">Adres</span>
+                  <input
+                    type="text"
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={adminForm.address}
+                    onChange={(event) => {
+                      setAdminForm((form) => ({ ...form, address: event.target.value }));
+                      setAdminError(null);
+                    }}
+                  />
+                </label>
+
+                {shouldShowAddressSuggestions && (isLoadingAddressSuggestions || addressSuggestions.length > 0) && (
+                  <div className="overflow-hidden rounded border border-slate-200 bg-white">
+                    {isLoadingAddressSuggestions && (
+                      <div className="px-3 py-2 text-sm text-slate-500">Suggesties zoeken...</div>
+                    )}
+                    {addressSuggestions.map((suggestion) => (
+                      <button
+                        key={`${suggestion.latitude}-${suggestion.longitude}-${suggestion.label}`}
+                        type="button"
+                        className="block w-full border-t border-slate-100 px-3 py-2 text-left text-sm text-slate-700 transition first:border-t-0 hover:bg-slate-50"
+                        onClick={() => selectAddressSuggestion(suggestion)}
+                      >
+                        {suggestion.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="rounded bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={searchAdminAddress}
+                  disabled={isSearchingAddress}
+                >
+                  {isSearchingAddress ? "Adres zoeken..." : "Zoek adres op kaart"}
+                </button>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-slate-700">Latitude</span>
+                    <input
+                      type="number"
+                      step="any"
+                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      value={adminForm.latitude}
+                      onChange={(event) => setAdminForm((form) => ({ ...form, latitude: event.target.value }))}
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-sm font-medium text-slate-700">Longitude</span>
+                    <input
+                      type="number"
+                      step="any"
+                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                      value={adminForm.longitude}
+                      onChange={(event) => setAdminForm((form) => ({ ...form, longitude: event.target.value }))}
+                    />
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  className="rounded bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+                  onClick={startPickingLocation}
+                >
+                  Kies op kaart
+                </button>
+
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-slate-700">Info</span>
+                  <textarea
+                    className="min-h-20 w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                    value={adminForm.info}
+                    onChange={(event) => setAdminForm((form) => ({ ...form, info: event.target.value }))}
+                  />
+                </label>
+
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-slate-700">Openingsuren</div>
+                  <div className="grid gap-3">
+                    {shortDayLabels.map((day, index) => {
+                      const dayHours = getAdminDayHoursValue(adminForm.dayHours[index]);
+
+                      return (
+                        <div key={day} className="grid gap-2 rounded border border-slate-200 p-3 sm:grid-cols-[4rem_1fr_1fr_1fr] sm:items-end">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 sm:pb-2">{day}</div>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
+                            <select
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"
+                              value={dayHours.isOpen ? "open" : "closed"}
+                              onChange={(event) => updateAdminDayOpenStatus(index, event.target.value === "open")}
+                            >
+                              <option value="closed">Gesloten</option>
+                              <option value="open">Open</option>
+                            </select>
+                          </label>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Van</span>
+                            <select
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-400"
+                              value={dayHours.open}
+                              disabled={!dayHours.isOpen}
+                              onChange={(event) => updateAdminDayTime(index, "open", event.target.value)}
+                            >
+                              {timeOptions.map((time) => (
+                                <option key={time} value={time}>{time}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tot</span>
+                            <select
+                              className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-400"
+                              value={dayHours.close}
+                              disabled={!dayHours.isOpen}
+                              onChange={(event) => updateAdminDayTime(index, "close", event.target.value)}
+                            >
+                              {timeOptions.map((time) => (
+                                <option key={time} value={time}>{time}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {adminError && (
+                  <div className={`text-sm ${adminError === "Locatie opgeslagen." ? "text-emerald-700" : "text-rose-600"}`}>
+                    {adminError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                >
+                  Locatie opslaan
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
 
       {viewMode === "map" ? (
         <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full" zoomControl={false}>
+        <MapClickPicker active={isPickingLocation} onPick={handlePickedLocation} />
+        <MapFocus position={adminDraftPosition} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
@@ -501,7 +1379,11 @@ export default function MapClient({ places }: { places: Place[] }) {
             position={place.position}
             icon={icon}
             eventHandlers={{
-              click: () => setSelectedPlaceName(place.name),
+              click: () => {
+                if (!isPickingLocation) {
+                  setSelectedPlaceName(place.name);
+                }
+              },
             }}
           />
         ))}
@@ -511,13 +1393,19 @@ export default function MapClient({ places }: { places: Place[] }) {
             <Popup>📍 Jouw locatie</Popup>
           </Marker>
         )}
+
+        {isAdminUnlocked && adminDraftPosition && (
+          <Marker position={adminDraftPosition} icon={adminDraftIcon}>
+            <Popup>Nieuwe/gewijzigde locatie</Popup>
+          </Marker>
+        )}
       </MapContainer>
       ) : (
         <div className="absolute inset-0 overflow-auto bg-slate-50 p-4 pt-24">
           <div className="max-w-4xl mx-auto space-y-4">
             {listPlaces.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-600">
-                Geen locaties gevonden voor deze filter.
+                Geen locaties gevonden voor deze filters.
               </div>
             ) : (
               listPlaces.map((place: PlaceWithDistance) => {
@@ -558,6 +1446,8 @@ export default function MapClient({ places }: { places: Place[] }) {
             place={selectedPlace}
             status={placeStatuses.get(selectedPlace.name) ?? getOpenStatus(selectedPlace, now)}
             distance={selectedPlaceDistance}
+            mateReport={mateReports[normalizeType(selectedPlace.name)]}
+            onMateReport={reportMateStatus}
             onClose={() => setSelectedPlaceName(null)}
           />
         </div>
