@@ -15,8 +15,8 @@ type Place = {
   position: [number, number];
   info: string;
   type: "cafe" | "shop";
-  address: string;
-  hours: OpeningInterval[][];
+  address?: string;
+  hours?: OpeningInterval[][];
 };
 
 const icon = new L.Icon({
@@ -95,6 +95,13 @@ const getBrusselsTimeParts = (date: Date) => {
 };
 
 const getOpenStatus = (place: Place, now: Date): OpenStatus => {
+  if (!place.hours?.length) {
+    return {
+      isOpen: false,
+      label: "Openingsuren onbekend",
+    };
+  }
+
   const { dayIndex, minutes } = getBrusselsTimeParts(now);
   const todayHours = place.hours[dayIndex] ?? [];
   const previousDayIndex = (dayIndex + 6) % 7;
@@ -147,7 +154,7 @@ const getOpenStatus = (place: Place, now: Date): OpenStatus => {
 };
 
 const formatHours = (hours: Place["hours"]) =>
-  hours.map((intervals, index) => ({
+  (hours ?? []).map((intervals, index) => ({
     day: shortDayLabels[index],
     value: intervals.length === 0
       ? "Gesloten"
@@ -180,6 +187,7 @@ function PlaceDetails({
   onClose?: () => void;
 }) {
   const [hoursOpen, setHoursOpen] = useState(false);
+  const formattedHours = formatHours(place.hours);
 
   return (
     <div className="space-y-4">
@@ -204,7 +212,7 @@ function PlaceDetails({
 
       <div className="space-y-1">
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Adres</div>
-        <div className="text-sm text-slate-800">{place.address}</div>
+        <div className="text-sm text-slate-800">{place.address ?? "Adres onbekend"}</div>
       </div>
 
       <div className="space-y-1">
@@ -237,12 +245,16 @@ function PlaceDetails({
 
         {hoursOpen && (
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 px-3 text-sm text-slate-800">
-            {formatHours(place.hours).map((item) => (
-              <div key={item.day} className="contents">
-                <div className="font-medium text-slate-600">{item.day}</div>
-                <div>{item.value}</div>
-              </div>
-            ))}
+            {formattedHours.length > 0 ? (
+              formattedHours.map((item) => (
+                <div key={item.day} className="contents">
+                  <div className="font-medium text-slate-600">{item.day}</div>
+                  <div>{item.value}</div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-2 text-slate-500">Geen openingsuren bekend.</div>
+            )}
           </div>
         )}
       </div>
@@ -483,7 +495,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                   <div className="mt-3">
                     <OpenBadge status={status} />
                   </div>
-                  <div className="mt-2 text-sm text-slate-500">{place.address}</div>
+                  <div className="mt-2 text-sm text-slate-500">{place.address ?? "Adres onbekend"}</div>
                 </button>
               )})
             )}
