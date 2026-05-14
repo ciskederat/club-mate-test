@@ -600,6 +600,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
   const [isLoadingAddressSuggestions, setIsLoadingAddressSuggestions] = useState(false);
+  const [addressSuggestionMessage, setAddressSuggestionMessage] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [selectedPlaceName, setSelectedPlaceName] = useState<string | null>(null);
@@ -706,10 +707,12 @@ export default function MapClient({ places }: { places: Place[] }) {
         .then((response) => response.json())
         .then((data) => {
           setAddressSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+          setAddressSuggestionMessage(data.error ?? null);
         })
         .catch((error) => {
           if (error?.name !== "AbortError") {
             setAddressSuggestions([]);
+            setAddressSuggestionMessage("Suggesties ophalen is mislukt.");
           }
         })
         .finally(() => {
@@ -779,6 +782,10 @@ export default function MapClient({ places }: { places: Place[] }) {
     return getDistanceKm(userLocation, selectedPlace.position);
   }, [selectedPlace, userLocation]);
   const adminDraftPosition = useMemo<[number, number] | null>(() => {
+    if (!adminForm.latitude.trim() || !adminForm.longitude.trim()) {
+      return null;
+    }
+
     const latitude = Number(adminForm.latitude);
     const longitude = Number(adminForm.longitude);
 
@@ -1222,14 +1229,18 @@ export default function MapClient({ places }: { places: Place[] }) {
                     onChange={(event) => {
                       setAdminForm((form) => ({ ...form, address: event.target.value }));
                       setAdminError(null);
+                      setAddressSuggestionMessage(null);
                     }}
                   />
                 </label>
 
-                {shouldShowAddressSuggestions && (isLoadingAddressSuggestions || addressSuggestions.length > 0) && (
+                {shouldShowAddressSuggestions && (isLoadingAddressSuggestions || addressSuggestions.length > 0 || addressSuggestionMessage) && (
                   <div className="overflow-hidden rounded border border-slate-200 bg-white">
                     {isLoadingAddressSuggestions && (
                       <div className="px-3 py-2 text-sm text-slate-500">Suggesties zoeken...</div>
+                    )}
+                    {!isLoadingAddressSuggestions && addressSuggestionMessage && addressSuggestions.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-slate-500">{addressSuggestionMessage}</div>
                     )}
                     {addressSuggestions.map((suggestion) => (
                       <button
