@@ -1,17 +1,38 @@
-import { parseGoogleOpeningHours, parseOpeningHoursText } from "@/lib/openingHours";
+import { parseGoogleOpeningHours, parseOpeningHoursText, parseWeekdayDescriptions } from "@/lib/openingHours";
 
 const getGoogleApiKey = () => process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY;
 
-const mapGoogleTypeToPlaceType = (primaryType?: string | null) => {
-  if (!primaryType) {
+const mapGoogleTypeToPlaceType = (primaryType?: string | null, googleMapsTypeLabel?: string | null) => {
+  const normalizedPrimaryType = primaryType?.toLowerCase() ?? "";
+  const normalizedTypeLabel = googleMapsTypeLabel?.toLowerCase() ?? "";
+  const combinedTypeText = `${normalizedPrimaryType} ${normalizedTypeLabel}`;
+
+  if (!combinedTypeText.trim()) {
     return undefined;
   }
 
-  if (primaryType.includes("supermarket") || primaryType.includes("grocery_store") || primaryType.includes("convenience_store")) {
+  if (
+    combinedTypeText.includes("supermarket")
+    || combinedTypeText.includes("grocery_store")
+    || combinedTypeText.includes("convenience_store")
+    || combinedTypeText.includes("liquor_store")
+    || combinedTypeText.includes("food_store")
+    || combinedTypeText.includes("market")
+    || combinedTypeText.includes("winkel")
+    || combinedTypeText.includes("supermarkt")
+  ) {
     return "shop";
   }
 
-  if (primaryType.includes("cafe") || primaryType.includes("bar") || primaryType.includes("restaurant") || primaryType.includes("night_club")) {
+  if (
+    combinedTypeText.includes("cafe")
+    || combinedTypeText.includes("bar")
+    || combinedTypeText.includes("restaurant")
+    || combinedTypeText.includes("night_club")
+    || combinedTypeText.includes("pub")
+    || combinedTypeText.includes("coffee")
+    || combinedTypeText.includes("caf")
+  ) {
     return "cafe";
   }
 
@@ -36,7 +57,7 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": googleApiKey,
-        "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,regularOpeningHours,websiteUri",
+        "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,googleMapsTypeLabel,regularOpeningHours.periods,regularOpeningHours.weekdayDescriptions,websiteUri",
         ...(sessionToken ? { "X-Goog-Session-Token": sessionToken } : {}),
       },
       cache: "no-store",
@@ -54,26 +75,34 @@ export async function GET(request: Request) {
           longitude?: number;
         };
         primaryType?: string;
+        googleMapsTypeLabel?: {
+          text?: string;
+        };
         regularOpeningHours?: {
           periods?: Array<{
             open?: { day?: number; hour?: number; minute?: number; time?: string };
             close?: { day?: number; hour?: number; minute?: number; time?: string };
           }>;
+          weekdayDescriptions?: string[];
         };
         websiteUri?: string;
       } | null;
 
+      const parsedHoursFromPeriods = parseGoogleOpeningHours(data?.regularOpeningHours);
+      const hasAnyPeriods = parsedHoursFromPeriods.some((dayHours) => dayHours.length > 0);
+      const parsedHoursFromDescriptions = parseWeekdayDescriptions(data?.regularOpeningHours?.weekdayDescriptions);
+
       return Response.json({
         provider: "google",
         placeId: data?.id ?? placeId ?? null,
-        hours: parseGoogleOpeningHours(data?.regularOpeningHours),
+        hours: hasAnyPeriods ? parsedHoursFromPeriods : parsedHoursFromDescriptions,
         rawOpeningHours: data?.regularOpeningHours ?? null,
         address: data?.formattedAddress ?? null,
         name: data?.displayName?.text ?? null,
         website: data?.websiteUri ?? null,
         latitude: data?.location?.latitude ?? null,
         longitude: data?.location?.longitude ?? null,
-        type: mapGoogleTypeToPlaceType(data?.primaryType),
+        type: mapGoogleTypeToPlaceType(data?.primaryType, data?.googleMapsTypeLabel?.text),
       });
     }
   }

@@ -621,6 +621,33 @@ function MapInteractionController({
   return null;
 }
 
+function MiniMapPreview({
+  position,
+}: {
+  position: [number, number];
+}) {
+  const [latitude, longitude] = position;
+  const offset = 0.0045;
+  const bbox = [
+    longitude - offset,
+    latitude - offset,
+    longitude + offset,
+    latitude + offset,
+  ].join(",");
+  const marker = `${latitude},${longitude}`;
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
+      <iframe
+        title="Locatievoorbeeld op kaart"
+        src={`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(marker)}`}
+        className="block h-44 w-full"
+        loading="lazy"
+      />
+    </div>
+  );
+}
+
 export default function MapClient({ places }: { places: Place[] }) {
   const [filter, setFilter] = useState("all");
   const [openNowOnly, setOpenNowOnly] = useState(false);
@@ -1084,7 +1111,6 @@ export default function MapClient({ places }: { places: Place[] }) {
     setAddressSuggestionMessage(null);
     setAddressSuggestionSelected(true);
     setAdminError("Adres gekozen.");
-    setFocusTarget([latitude, longitude]);
     setViewMode("map");
   };
 
@@ -1257,7 +1283,6 @@ export default function MapClient({ places }: { places: Place[] }) {
     setSpotFormMessage("Locatie gekozen. Controleer gerust nog even op de kaart.");
     setSelectedPlaceName(null);
     setViewMode("map");
-    setFocusTarget([latitude, longitude]);
   };
 
   const submitSpotForm = async () => {
@@ -1631,6 +1656,15 @@ export default function MapClient({ places }: { places: Place[] }) {
                   </div>
                 )}
 
+                {addressSuggestionSelected && adminForm.latitude && adminForm.longitude && (
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-slate-700">Gekozen locatie</div>
+                    <MiniMapPreview
+                      position={[Number(adminForm.latitude), Number(adminForm.longitude)]}
+                    />
+                  </div>
+                )}
+
                 <label className="block space-y-1">
                   <span className="text-sm font-medium text-slate-700">Info</span>
                   <textarea
@@ -1968,6 +2002,13 @@ export default function MapClient({ places }: { places: Place[] }) {
                   <div className="rounded-3xl bg-slate-50 p-4 text-sm text-slate-700">
                     <div className="font-medium text-slate-900">{spotForm.name}</div>
                     <div className="mt-1">{spotForm.address}</div>
+                  </div>
+                )}
+
+                {spotForm.latitude != null && spotForm.longitude != null && (
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium text-slate-700">Locatie op kaart</div>
+                    <MiniMapPreview position={[spotForm.latitude, spotForm.longitude]} />
                   </div>
                 )}
 

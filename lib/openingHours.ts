@@ -1,6 +1,36 @@
 import type { OpeningInterval } from "@/data/placeTypes";
 
 const orderedDayCodes = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as const;
+const localizedDayToIndex: Record<string, number> = {
+  maandag: 1,
+  dinsdag: 2,
+  woensdag: 3,
+  donderdag: 4,
+  vrijdag: 5,
+  zaterdag: 6,
+  zondag: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+  sunday: 0,
+  ma: 1,
+  di: 2,
+  wo: 3,
+  do: 4,
+  vr: 5,
+  za: 6,
+  zo: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+  sun: 0,
+};
 const dayCodeToIndex: Record<(typeof orderedDayCodes)[number], number> = {
   Mo: 1,
   Tu: 2,
@@ -168,6 +198,74 @@ export const parseGoogleOpeningHours = (
       ...parsedHours[openDay],
       { open: openTime, close: closeTime },
     ];
+  }
+
+  return parsedHours;
+};
+
+export const parseWeekdayDescriptions = (weekdayDescriptions?: string[] | null) => {
+  const parsedHours = createEmptyParsedHours();
+
+  if (!Array.isArray(weekdayDescriptions) || weekdayDescriptions.length === 0) {
+    return parsedHours;
+  }
+
+  for (const description of weekdayDescriptions) {
+    if (typeof description !== "string") {
+      continue;
+    }
+
+    const [rawDayLabel, rawHoursValue] = description.split(/:\s+/, 2);
+
+    if (!rawDayLabel || !rawHoursValue) {
+      continue;
+    }
+
+    const dayIndex = localizedDayToIndex[rawDayLabel.trim().toLowerCase()];
+
+    if (dayIndex == null) {
+      continue;
+    }
+
+    const normalizedHoursValue = rawHoursValue
+      .replace(/\u202f/g, " ")
+      .replace(/\u2009/g, " ")
+      .replace(/[–—]/g, "-")
+      .trim();
+
+    if (
+      normalizedHoursValue.toLowerCase() === "gesloten"
+      || normalizedHoursValue.toLowerCase() === "closed"
+    ) {
+      parsedHours[dayIndex] = [];
+      continue;
+    }
+
+    if (normalizedHoursValue === "24 uur geopend" || normalizedHoursValue === "Open 24 hours") {
+      parsedHours[dayIndex] = [{ open: "00:00", close: "23:59" }];
+      continue;
+    }
+
+    const intervals = normalizedHoursValue
+      .split(",")
+      .map((part) => part.trim())
+      .map((part) => {
+        const intervalMatch = part.match(/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
+
+        if (!intervalMatch) {
+          return null;
+        }
+
+        return {
+          open: intervalMatch[1].padStart(5, "0"),
+          close: intervalMatch[2].padStart(5, "0"),
+        };
+      })
+      .filter((interval): interval is OpeningInterval => Boolean(interval));
+
+    if (intervals.length > 0) {
+      parsedHours[dayIndex] = intervals;
+    }
   }
 
   return parsedHours;
