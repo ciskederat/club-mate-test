@@ -2244,7 +2244,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Info</div>
-                <div className="retro-display mt-1 text-2xl leading-tight text-[#2f2822]">Club Mate Antwerpen</div>
+                <div className="retro-display mt-1 text-2xl leading-tight text-[#2f2822]">Mate Alert</div>
               </div>
               <button
                 type="button"

@@ -16,6 +16,34 @@ const mapGoogleTypeToPlaceType = (types?: string[]) => {
   return "other";
 };
 
+const mapGeoapifyCategoryToPlaceType = (category?: string | null) => {
+  const normalizedCategory = category?.toLowerCase() ?? "";
+
+  if (
+    normalizedCategory.includes("commercial.supermarket")
+    || normalizedCategory.includes("commercial.food_and_drink")
+    || normalizedCategory.includes("commercial.convenience")
+    || normalizedCategory.includes("commercial.marketplace")
+    || normalizedCategory.includes("shop.supermarket")
+    || normalizedCategory.includes("shop.convenience")
+    || normalizedCategory.includes("shop.food")
+  ) {
+    return "shop";
+  }
+
+  if (
+    normalizedCategory.includes("catering")
+    || normalizedCategory.includes("cafe")
+    || normalizedCategory.includes("restaurant")
+    || normalizedCategory.includes("bar")
+    || normalizedCategory.includes("pub")
+  ) {
+    return "cafe";
+  }
+
+  return "other";
+};
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim();
@@ -188,12 +216,7 @@ export async function GET(request: Request) {
           placeId: properties.place_id,
           label: properties.formatted,
           name: properties.name ?? properties.address_line1 ?? properties.formatted,
-          type:
-            properties.category?.includes("commercial.supermarket") || properties.result_type === "amenity"
-              ? "shop"
-              : properties.category?.includes("catering") || properties.category?.includes("accommodation")
-                ? "cafe"
-                : "other",
+          type: mapGeoapifyCategoryToPlaceType(properties.category),
           latitude: Number(coordinates[1]),
           longitude: Number(coordinates[0]),
         };

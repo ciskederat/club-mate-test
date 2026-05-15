@@ -17,7 +17,6 @@ const mapGoogleTypeToPlaceType = (primaryType?: string | null, googleMapsTypeLab
     || combinedTypeText.includes("convenience_store")
     || combinedTypeText.includes("liquor_store")
     || combinedTypeText.includes("food_store")
-    || combinedTypeText.includes("market")
     || combinedTypeText.includes("winkel")
     || combinedTypeText.includes("supermarkt")
   ) {
@@ -32,6 +31,34 @@ const mapGoogleTypeToPlaceType = (primaryType?: string | null, googleMapsTypeLab
     || combinedTypeText.includes("pub")
     || combinedTypeText.includes("coffee")
     || combinedTypeText.includes("caf")
+  ) {
+    return "cafe";
+  }
+
+  return "other";
+};
+
+const mapGeoapifyCategoryToPlaceType = (category?: string | null) => {
+  const normalizedCategory = category?.toLowerCase() ?? "";
+
+  if (
+    normalizedCategory.includes("commercial.supermarket")
+    || normalizedCategory.includes("commercial.food_and_drink")
+    || normalizedCategory.includes("commercial.convenience")
+    || normalizedCategory.includes("commercial.marketplace")
+    || normalizedCategory.includes("shop.supermarket")
+    || normalizedCategory.includes("shop.convenience")
+    || normalizedCategory.includes("shop.food")
+  ) {
+    return "shop";
+  }
+
+  if (
+    normalizedCategory.includes("catering")
+    || normalizedCategory.includes("cafe")
+    || normalizedCategory.includes("restaurant")
+    || normalizedCategory.includes("bar")
+    || normalizedCategory.includes("pub")
   ) {
     return "cafe";
   }
@@ -139,6 +166,7 @@ export async function GET(request: Request) {
         formatted?: string;
         name?: string;
         website?: string;
+        category?: string;
       };
     }>;
   } | null;
@@ -152,5 +180,6 @@ export async function GET(request: Request) {
     address: properties?.formatted ?? null,
     name: properties?.name ?? null,
     website: properties?.website ?? null,
+    type: mapGeoapifyCategoryToPlaceType(properties?.category),
   });
 }

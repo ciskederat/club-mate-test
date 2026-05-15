@@ -16,7 +16,7 @@ const dmSerifDisplay = DM_Serif_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Club Mate Antwerpen",
+  title: "Mate Alert",
   description: "Een alternatieve kaart voor cafés en winkels met Club Mate in Antwerpen.",
 };
 

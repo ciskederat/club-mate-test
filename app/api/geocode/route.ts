@@ -15,8 +15,8 @@ export async function GET(request: Request) {
 
   const response = await fetch(nominatimUrl, {
     headers: {
-      "User-Agent": "clubmate-map/1.0 contact:admin",
-      Referer: "https://clubmate-map.vercel.app",
+      "User-Agent": "mate-alert/1.0 contact:admin",
+      Referer: "https://mate-alert.vercel.app",
     },
     cache: "no-store",
   });
