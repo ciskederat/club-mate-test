@@ -41,6 +41,14 @@ const userIcon = new L.Icon({
   className: "user-marker",
 });
 
+const mapTilerAquarelleUrl =
+  "https://api.maptiler.com/maps/aquarelle-v4/256/{z}/{x}/{y}.png?key=rtNRwNDetFusrDDFDwMR";
+const mapTilerAttribution =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.maptiler.com/copyright/" target="_blank" rel="noreferrer">MapTiler</a>';
+const cartoLabelsOnlyUrl = "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png";
+const cartoLabelsAttribution =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
+
 const filterOptions = [
   { value: "all", label: "Alles", widthClass: "w-[100px] sm:w-[104px]" },
   { value: "cafe", label: "Cafés", widthClass: "w-[114px] sm:w-[120px]" },
@@ -1847,7 +1855,7 @@ export default function MapClient({ places }: { places: Place[] }) {
 	      )}
 
       {viewMode === "map" ? (
-        <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full" zoomControl={false}>
+        <MapContainer center={[51.2194, 4.4025]} zoom={13} className="map-surface h-full w-full" zoomControl={false}>
         <MapViewportController focusTarget={focusTarget} />
         <MapInteractionController
           onMapClick={() => {
@@ -1855,8 +1863,16 @@ export default function MapClient({ places }: { places: Place[] }) {
           }}
         />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+          attribution={mapTilerAttribution}
+          url={mapTilerAquarelleUrl}
+          keepBuffer={2}
+        />
+        <TileLayer
+          attribution={cartoLabelsAttribution}
+          url={cartoLabelsOnlyUrl}
+          opacity={0.82}
+          updateWhenZooming={false}
+          keepBuffer={1}
         />
         <ZoomControl position="bottomright" />
 
