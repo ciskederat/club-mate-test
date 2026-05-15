@@ -1,9 +1,16 @@
-@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Notable&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=DM+Serif+Display&display=swap");
 @import "tailwindcss";
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --club-paper: #efe0c6;
+  --club-paper-light: #fff8e8;
+  --club-mustard: #e5bd48;
+  --club-mustard-deep: #d5a83b;
+  --club-red-muted: #9f4a3d;
+  --club-ink: #26304a;
+  --club-brown: #46362d;
 }
 
 @theme inline {
@@ -26,6 +33,25 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(159, 74, 61, 0.5);
+  box-shadow: 0 0 0 3px rgba(229, 189, 72, 0.2);
+  outline: none;
+}
+
 .font-bricolage {
   font-family: "Bricolage Grotesque", var(--font-bricolage-grotesque), var(--font-geist-sans), Arial, Helvetica, sans-serif !important;
   font-style: normal;
@@ -33,8 +59,93 @@ body {
   font-variation-settings: "opsz" 32, "wght" 760;
 }
 
+.retro-display {
+  font-family: "DM Serif Display", Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
 .map-surface .leaflet-container {
   background: #eef2f7;
+}
+
+.map-surface .leaflet-tile,
+.mini-map-surface .leaflet-tile {
+  filter: saturate(1.1) contrast(1.08) brightness(0.99);
+}
+
+.retro-surface,
+.retro-modal,
+.retro-info-panel,
+.retro-soft-card {
+  position: relative;
+  isolation: isolate;
+}
+
+.retro-surface::before,
+.retro-modal::before,
+.retro-info-panel::before,
+.retro-soft-card::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  content: "";
+}
+
+.retro-surface::before {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.38), transparent 28%),
+    radial-gradient(circle at 82% 24%, rgba(229, 189, 72, 0.14), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.03)),
+    repeating-linear-gradient(45deg, rgba(70, 54, 45, 0.028) 0 1px, transparent 1px 7px);
+  opacity: 0.76;
+}
+
+.retro-modal::before,
+.retro-info-panel::before {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(229, 189, 72, 0.11), transparent 30%),
+    radial-gradient(circle at 100% 12%, rgba(159, 74, 61, 0.055), transparent 28%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.58), rgba(239, 224, 198, 0.12)),
+    repeating-linear-gradient(135deg, rgba(70, 54, 45, 0.02) 0 1px, transparent 1px 8px);
+  opacity: 0.9;
+}
+
+.retro-soft-card::before {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.08)),
+    repeating-linear-gradient(135deg, rgba(70, 54, 45, 0.018) 0 1px, transparent 1px 7px);
+  opacity: 0.78;
+}
+
+.retro-modal,
+.retro-info-panel {
+  animation: panelReveal 190ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes panelReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .map-surface .leaflet-control-zoom {

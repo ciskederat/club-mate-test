@@ -56,22 +56,24 @@ const cartoLabelsAttribution =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
 
 const filterOptions = [
-  { value: "all", label: "Alles", widthClass: "min-w-[72px]" },
-  { value: "cafe", label: "Cafés", widthClass: "min-w-[76px]" },
-  { value: "shop", label: "Supermarkten", widthClass: "min-w-[118px]" },
+  { value: "all", label: "Alles", widthClass: "min-w-[60px]" },
+  { value: "cafe", label: "Cafés", widthClass: "min-w-[64px]" },
+  { value: "shop", label: "Supermarkten", widthClass: "min-w-[108px]" },
 ];
 
 const accentButtonClass =
-  "rounded-xl border border-[#d8271d] bg-[#f7c200] text-[#193882] shadow-[0_8px_24px_rgba(25,56,130,0.1)] transition hover:bg-[#dbb323]";
+  "rounded-xl border border-[#9f4a3d]/55 bg-[#e5bd48] text-[#26304a] shadow-[0_6px_18px_rgba(52,38,31,0.11)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#8d3f35]/70 hover:bg-[#d8ac38] hover:shadow-[0_10px_24px_rgba(52,38,31,0.16)] active:translate-y-0";
 const accentButtonActiveClass =
-  "rounded-xl border border-[#d8271d] bg-[#dbb323] text-[#193882] shadow-[0_10px_24px_rgba(25,56,130,0.14)] transition";
+  "rounded-xl border border-[#8d3f35]/70 bg-[#d5a83b] text-[#202941] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_8px_20px_rgba(52,38,31,0.14)] transition duration-200 ease-out";
 const accentIconButtonClass =
-  "grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#d8271d] bg-[#f7c200] text-[#193882] shadow-[0_8px_24px_rgba(25,56,130,0.1)] transition hover:bg-[#dbb323]";
+  "grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-[#9f4a3d]/55 bg-[#e5bd48] text-[#26304a] shadow-[0_6px_18px_rgba(52,38,31,0.11)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#8d3f35]/70 hover:bg-[#d8ac38] hover:shadow-[0_10px_24px_rgba(52,38,31,0.16)] active:translate-y-0";
+const secondaryButtonClass =
+  "rounded-xl border border-[#9f4a3d]/28 bg-[#fff8e8]/72 text-[#46362d] shadow-[0_6px_18px_rgba(52,38,31,0.07)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#9f4a3d]/45 hover:bg-white/86 hover:shadow-[0_10px_24px_rgba(52,38,31,0.12)] active:translate-y-0";
 const notableHomeButtonClass =
-  `${bricolageGrotesque.className} font-bricolage whitespace-nowrap text-center text-[13px] font-extrabold leading-[1.05] tracking-[0.015em] sm:text-[13px]`;
+  `${bricolageGrotesque.className} font-bricolage whitespace-nowrap text-center text-[12px] font-bold leading-none tracking-[0.01em] sm:text-[12px]`;
 const bricolageButtonStyle = {
   fontFamily: '"Bricolage Grotesque", sans-serif',
-  fontWeight: 760,
+  fontWeight: 680,
   fontOpticalSizing: "auto" as const,
 };
 
@@ -451,9 +453,9 @@ const formatReportDate = (value: string) => {
 
 function OpenBadge({ status }: { status: OpenStatus }) {
   return (
-    <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+    <div className="inline-flex items-center gap-2 rounded-full border border-white/55 bg-[#fff8e8]/72 px-3 py-1.5 text-sm font-semibold text-[#46362d] shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_8px_18px_rgba(52,38,31,0.08)] backdrop-blur">
       <span
-        className={`h-2.5 w-2.5 rounded-full ${status.isOpen ? "bg-emerald-500" : "bg-slate-300"}`}
+        className={`h-2.5 w-2.5 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.75)] ${status.isOpen ? "bg-emerald-500" : "bg-slate-300"}`}
         aria-hidden="true"
       />
       <span>{status.label}</span>
@@ -482,11 +484,11 @@ function PlaceDetails({
   const formattedHours = formatHours(place.hours, todayIndex);
 
   return (
-    <div className="space-y-5">
-      <div className="sticky top-0 z-10 -mx-1 -mt-1 flex items-start justify-between gap-4 rounded-t-[1.75rem] bg-white px-1 pt-1">
+    <div className="space-y-3.5 text-slate-900 sm:space-y-4">
+      <div className="sticky top-0 z-10 -mx-2 -mt-2 flex items-start justify-between gap-4 rounded-[1.5rem] border border-white/60 bg-[#fff8e8]/84 px-3 py-3 shadow-[0_10px_28px_rgba(52,38,31,0.09)] backdrop-blur-md">
         <div className="pr-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{typeLabel(place.type)}</div>
-          <div className="text-xl font-semibold text-slate-950">{place.name}</div>
+          <div className="w-fit rounded-full border border-[#9f4a3d]/18 bg-[#e5bd48]/35 px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-[0.08em] text-[#26304a]">{typeLabel(place.type)}</div>
+          <div className="retro-display mt-2 text-[1.55rem] leading-tight text-[#2f2822]">{place.name}</div>
         </div>
         {onClose && (
           <button
@@ -502,39 +504,39 @@ function PlaceDetails({
 
       <OpenBadge status={status} />
 
-      <div className="space-y-1">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Adres</div>
+      <div className="retro-soft-card space-y-1 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
+        <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Adres</div>
         <div className="text-sm text-slate-800">{place.address ?? "Adres onbekend"}</div>
       </div>
 
-      <div className="space-y-1">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Info</div>
+      <div className="retro-soft-card space-y-1 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
+        <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Info</div>
         <div className="text-sm text-slate-800">{place.info}</div>
       </div>
 
-      <div className="space-y-2 rounded-3xl border border-slate-200 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Club Mate voorraad</div>
+      <div className="retro-soft-card space-y-3 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
+        <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Club Mate voorraad</div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            className={`${accentButtonClass} min-h-11 px-4 py-2 text-sm font-medium`}
+            className={`${accentButtonClass} min-h-10 px-3.5 py-2 text-sm font-semibold`}
             onClick={() => onMateReport(place.name, "present")}
           >
             Club Mate aanwezig
           </button>
           <button
             type="button"
-            className={`${accentButtonClass} min-h-11 px-4 py-2 text-sm font-medium`}
+            className={`${secondaryButtonClass} min-h-10 px-3.5 py-2 text-sm font-medium`}
             onClick={() => onMateReport(place.name, "absent")}
           >
             Niet meer aanwezig
           </button>
         </div>
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded bg-slate-50 px-3 py-2 text-slate-700">
+          <div className="rounded-xl bg-[#ecd2aa]/35 px-3 py-2 text-slate-700">
             Aanwezig gemeld: <span className="font-semibold">{mateReport?.presentCount ?? 0}</span>
           </div>
-          <div className="rounded bg-slate-50 px-3 py-2 text-slate-700">
+          <div className="rounded-xl bg-[#ecd2aa]/35 px-3 py-2 text-slate-700">
             Niet aanwezig: <span className="font-semibold">{mateReport?.absentCount ?? 0}</span>
           </div>
         </div>
@@ -546,8 +548,8 @@ function PlaceDetails({
       </div>
 
       {distance != null && (
-        <div className="space-y-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Afstand</div>
+        <div className="retro-soft-card space-y-1 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
+          <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Afstand</div>
           <div className="text-sm text-slate-800">{formatDistance(distance)}</div>
         </div>
       )}
@@ -555,7 +557,7 @@ function PlaceDetails({
       <div className="space-y-2">
         <button
           type="button"
-          className={`${accentButtonClass} flex min-h-11 w-full items-center justify-between px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide`}
+          className={`${secondaryButtonClass} flex min-h-10 w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold uppercase tracking-[0.08em]`}
           onClick={() => setHoursOpen((isOpen) => !isOpen)}
           aria-expanded={hoursOpen}
         >
@@ -569,13 +571,13 @@ function PlaceDetails({
         </button>
 
         {hoursOpen && (
-          <div className="space-y-2">
+          <div className="space-y-2 animate-[panelReveal_180ms_ease-out]">
             {formattedHours.length > 0 ? (
               formattedHours.map((item) => (
                 <div
                   key={item.key}
-                  className={`grid grid-cols-[minmax(4rem,auto)_1fr] items-center gap-3 rounded-2xl px-3 py-2 text-sm ${
-                    item.isToday ? "bg-emerald-50 text-emerald-950" : "bg-slate-50 text-slate-800"
+                  className={`grid grid-cols-[minmax(4rem,auto)_1fr] items-center gap-3 rounded-xl border px-3 py-2 text-sm transition ${
+                    item.isToday ? "border-emerald-200 bg-emerald-50/90 text-emerald-950 shadow-[0_8px_18px_rgba(16,185,129,0.08)]" : "border-white/60 bg-white/55 text-slate-800"
                   }`}
                 >
                   <div className="font-medium capitalize">
@@ -671,7 +673,7 @@ function MiniMapPreview({
         <TileLayer
           attribution={cartoLabelsAttribution}
           url={cartoLabelsOnlyUrl}
-          opacity={0.82}
+          opacity={0.94}
           updateWhenZooming={false}
           keepBuffer={1}
         />
@@ -1467,12 +1469,12 @@ export default function MapClient({ places }: { places: Place[] }) {
   return (
     <div className="relative h-dvh w-screen overflow-hidden bg-slate-100">
       {showFloatingUi && (
-        <div className="absolute left-3 right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[1000] rounded-2xl border border-[#d8271d] bg-[#ecd2aa] p-2 shadow-[0_18px_45px_rgba(15,23,42,0.14)] backdrop-blur-md sm:left-4 sm:right-auto sm:top-4 sm:min-w-[18rem] sm:p-3">
-          <div className="flex items-center gap-2">
-            <div className="grid min-w-0 flex-1 grid-cols-3 gap-2">
+        <div className="retro-surface absolute left-3 right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[1000] rounded-2xl border border-[#9f4a3d]/42 bg-[#efe0c6]/82 p-1.5 shadow-[0_14px_36px_rgba(52,38,31,0.14)] backdrop-blur-md sm:left-4 sm:right-auto sm:top-4 sm:min-w-[17rem] sm:p-2">
+          <div className="flex items-center gap-1.5">
+            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5">
               <button
                 type="button"
-                className={`${notableHomeButtonClass} ${viewMode === "map" ? accentButtonActiveClass : accentButtonClass} min-h-[36px] px-3 py-2`}
+                className={`${notableHomeButtonClass} ${viewMode === "map" ? accentButtonActiveClass : accentButtonClass} min-h-[30px] px-2.5 py-1.5`}
                 style={bricolageButtonStyle}
                 onClick={() => selectViewMode("map")}
               >
@@ -1480,7 +1482,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               </button>
               <button
                 type="button"
-                className={`${notableHomeButtonClass} ${viewMode === "list" ? accentButtonActiveClass : accentButtonClass} min-h-[36px] px-3 py-2`}
+                className={`${notableHomeButtonClass} ${viewMode === "list" ? accentButtonActiveClass : accentButtonClass} min-h-[30px] px-2.5 py-1.5`}
                 style={bricolageButtonStyle}
                 onClick={() => selectViewMode("list")}
               >
@@ -1488,7 +1490,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               </button>
               <button
                 type="button"
-                className={`${adminPanelOpen ? accentButtonActiveClass : accentButtonClass} flex min-h-[36px] items-center justify-center px-0 text-[18px] leading-none`}
+                className={`${adminPanelOpen ? accentButtonActiveClass : accentButtonClass} flex min-h-[30px] items-center justify-center px-0 text-[16px] leading-none`}
                 onClick={() => {
                   setSelectedPlaceName(null);
                   setSpotFormOpen(false);
@@ -1501,12 +1503,12 @@ export default function MapClient({ places }: { places: Place[] }) {
               </button>
             </div>
           </div>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
             {filterOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                className={`${notableHomeButtonClass} ${option.widthClass} ${filter === option.value ? accentButtonActiveClass : accentButtonClass} min-h-[34px] px-3 py-1.5`}
+                className={`${notableHomeButtonClass} ${option.widthClass} ${filter === option.value ? accentButtonActiveClass : accentButtonClass} min-h-[30px] px-2.5 py-1.5`}
                 style={bricolageButtonStyle}
                 onClick={() => selectFilter(option.value)}
               >
@@ -1515,7 +1517,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             ))}
             <button
               type="button"
-              className={`${notableHomeButtonClass} ${openNowOnly ? `${accentButtonActiveClass} border-emerald-500` : accentButtonClass} flex min-h-[34px] min-w-[94px] items-center justify-center gap-2 px-3 py-1.5`}
+              className={`${notableHomeButtonClass} ${openNowOnly ? `${accentButtonActiveClass} border-emerald-500/70 bg-emerald-50 text-emerald-950` : accentButtonClass} flex min-h-[30px] min-w-[84px] items-center justify-center gap-1.5 px-2.5 py-1.5`}
               style={bricolageButtonStyle}
               onClick={toggleOpenNowOnly}
               aria-pressed={openNowOnly}
@@ -1533,13 +1535,13 @@ export default function MapClient({ places }: { places: Place[] }) {
       {adminPanelOpen && (
         <div className="fixed inset-0 z-[1200] bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6" onClick={() => setAdminPanelOpen(false)}>
           <div
-            className="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl"
+            className="retro-modal mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/50 bg-white/90 shadow-[0_28px_80px_rgba(15,23,42,0.28)] backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
           >
           <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Beheer</div>
-              <div className="text-xl font-semibold text-slate-950">Locaties aanpassen</div>
+              <div className="retro-display text-2xl leading-tight text-[#2f2822]">Locaties aanpassen</div>
             </div>
             <button
               type="button"
@@ -1594,8 +1596,8 @@ export default function MapClient({ places }: { places: Place[] }) {
                       type="button"
                       className={`min-h-12 w-full rounded-2xl border px-4 py-3 text-left text-sm transition ${
                         normalizeType(editingPlaceName) === normalizeType(place.name)
-                          ? "border-[rgba(236,0,0,1)] bg-[rgba(235,150,49,1)] text-[rgba(236,0,0,1)] ring-2 ring-[rgba(236,0,0,0.15)]"
-                          : "border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[rgba(236,0,0,1)] hover:bg-[rgba(235,150,49,1)]"
+                          ? "border-[#8d3f35]/65 bg-[#d5a83b] text-[#26304a] shadow-[0_8px_20px_rgba(52,38,31,0.14)]"
+                          : "border-[#9f4a3d]/35 bg-[#fff8e8]/72 text-[#46362d] hover:border-[#9f4a3d]/55 hover:bg-[#e5bd48]/35"
                       }`}
                       onClick={() => startEditingPlace(place)}
                     >
@@ -1889,7 +1891,7 @@ export default function MapClient({ places }: { places: Place[] }) {
         <TileLayer
           attribution={cartoLabelsAttribution}
           url={cartoLabelsOnlyUrl}
-          opacity={0.82}
+          opacity={0.94}
           updateWhenZooming={false}
           keepBuffer={1}
         />
@@ -1912,10 +1914,10 @@ export default function MapClient({ places }: { places: Place[] }) {
 
       </MapContainer>
       ) : (
-        <div className="absolute inset-0 overflow-auto bg-slate-50 p-3 pb-24 pt-28 sm:p-4 sm:pb-28 sm:pt-24">
+        <div className="absolute inset-0 overflow-auto bg-[#f6efe2] p-3 pb-24 pt-28 sm:p-4 sm:pb-28 sm:pt-24">
           <div className="max-w-4xl mx-auto space-y-4">
             {listPlaces.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-slate-600 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+              <div className="retro-modal rounded-2xl border border-white/60 bg-white/70 p-5 text-center text-slate-600 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur">
                 Geen locaties gevonden voor deze filters.
               </div>
             ) : (
@@ -1926,7 +1928,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                 <button
                   key={place.name}
                   type="button"
-                  className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition hover:border-slate-300 hover:shadow-[0_14px_34px_rgba(15,23,42,0.1)] focus:outline-none focus:ring-2 focus:ring-slate-900 sm:p-5"
+                  className="retro-modal w-full rounded-2xl border border-white/60 bg-[#fff8e8]/72 p-4 text-left shadow-[0_10px_30px_rgba(52,38,31,0.08)] backdrop-blur transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#9f4a3d]/30 hover:shadow-[0_16px_38px_rgba(52,38,31,0.13)] focus:outline-none focus:ring-2 focus:ring-[#e5bd48]/35 sm:p-5"
                   onClick={() => setSelectedPlaceName(place.name)}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -1953,7 +1955,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       {showFloatingUi && (
         <button
           type="button"
-          className={`${bricolageGrotesque.className} absolute bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-[1000] flex h-11 w-[min(72vw,240px)] -translate-x-1/2 items-center justify-center rounded-xl border border-[#d8271d] bg-[#f7c200] px-4 text-center text-sm font-semibold tracking-[0.01em] text-[#193882] shadow-[0_18px_45px_rgba(25,56,130,0.18)] backdrop-blur-md transition hover:bg-[#dbb323] sm:bottom-4 sm:h-10 sm:w-[210px]`}
+          className={`${bricolageGrotesque.className} absolute bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-[1000] flex h-10 w-[min(68vw,210px)] -translate-x-1/2 items-center justify-center rounded-xl border border-[#9f4a3d]/55 bg-[#e5bd48] px-3.5 text-center text-[13px] font-semibold tracking-[0.01em] text-[#26304a] shadow-[0_16px_38px_rgba(52,38,31,0.18)] backdrop-blur-md transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-[#d8ac38] hover:shadow-[0_20px_46px_rgba(52,38,31,0.22)] active:translate-y-0 sm:bottom-4 sm:h-10 sm:w-[200px]`}
           style={bricolageButtonStyle}
           onClick={openSpotForm}
         >
@@ -1972,13 +1974,13 @@ export default function MapClient({ places }: { places: Place[] }) {
       {spotFormOpen && (
         <div className="fixed inset-0 z-[1150] bg-slate-950/40 p-3 backdrop-blur-sm sm:p-6" onClick={closeSpotForm}>
           <div
-            className="mx-auto flex h-full w-full max-w-xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl"
+            className="retro-modal mx-auto flex h-full w-full max-w-xl flex-col overflow-hidden rounded-[2rem] border border-white/50 bg-white/90 shadow-[0_28px_80px_rgba(15,23,42,0.28)] backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nieuwe spot</div>
-                <div className="text-xl font-semibold text-slate-950">Waar heb je Club Mate gezien?</div>
+                <div className="retro-display text-2xl leading-tight text-[#2f2822]">Waar heb je Club Mate gezien?</div>
               </div>
               <button
                 type="button"
@@ -2023,7 +2025,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                       <button
                         key={`${suggestion.placeId ?? suggestion.label}-${suggestion.latitude}-${suggestion.longitude}`}
                         type="button"
-                        className="block w-full border-t border-[rgba(236,0,0,0.2)] bg-[rgba(247,194,0,0.45)] px-4 py-3 text-left text-sm text-[rgba(236,0,0,1)] transition first:border-t-0 hover:bg-[rgba(235,150,49,0.55)]"
+                        className="block w-full border-t border-[#9f4a3d]/15 bg-[#fff8e8]/65 px-4 py-3 text-left text-sm text-[#46362d] transition first:border-t-0 hover:bg-[#e5bd48]/25"
                         onClick={() => selectSpotSuggestion(suggestion)}
                       >
                         <span className="block font-medium">{suggestion.name}</span>
@@ -2082,7 +2084,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       {selectedPlace && (
         <div className="fixed inset-0 z-[1100] flex items-end justify-center p-3 sm:items-end sm:justify-end sm:p-4" onClick={() => setSelectedPlaceName(null)}>
           <div
-            className="w-full max-w-md overflow-auto rounded-[2rem] border border-slate-200 bg-white p-4 shadow-2xl sm:max-h-[78dvh] sm:p-5"
+            className="retro-info-panel w-full max-w-md overflow-auto rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/84 p-3.5 shadow-[0_28px_80px_rgba(52,38,31,0.3)] backdrop-blur-xl sm:max-h-[78dvh] sm:p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <PlaceDetails
@@ -2101,8 +2103,8 @@ export default function MapClient({ places }: { places: Place[] }) {
 
       {pendingMateReport && (
         <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-sm rounded-[2rem] bg-white p-5 shadow-2xl">
-            <div className="text-lg font-semibold text-slate-950">Melding bevestigen</div>
+          <div className="retro-modal w-full max-w-sm rounded-[2rem] border border-white/55 bg-white/90 p-5 shadow-[0_28px_80px_rgba(15,23,42,0.28)] backdrop-blur-xl">
+            <div className="retro-display text-2xl leading-tight text-[#2f2822]">Melding bevestigen</div>
             <div className="mt-2 text-sm text-slate-600">
               Wil je melden dat bij {pendingMateReport.placeName} {reportStatusLabel(pendingMateReport.status).toLowerCase()} is?
             </div>
