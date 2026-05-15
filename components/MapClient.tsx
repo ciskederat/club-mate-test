@@ -72,9 +72,9 @@ const secondaryButtonClass =
 const notableHomeButtonClass =
   `${bricolageGrotesque.className} font-bricolage flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-[14px] border px-3 text-center text-[11px] font-bold leading-none tracking-[0.01em] transition duration-200 ease-out sm:h-9 sm:px-3.5 sm:text-[12px]`;
 const toolbarButtonClass =
-  "border-[#9f4a3d]/24 bg-[#fff8e8]/58 text-[#4a3a31] shadow-[inset_0_1px_0_rgba(255,255,255,0.58),0_4px_12px_rgba(52,38,31,0.06)] hover:border-[#9f4a3d]/38 hover:bg-[#fffaf0]/78 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_7px_16px_rgba(52,38,31,0.09)]";
+  "border-[#d9261c]/50 bg-[#fff8e8]/58 text-[#4a3a31] shadow-[inset_0_1px_0_rgba(255,255,255,0.58),0_4px_12px_rgba(52,38,31,0.06)] hover:border-[#d9261c]/38 hover:bg-[#fffaf0]/78 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_7px_16px_rgba(52,38,31,0.09)]";
 const toolbarActiveButtonClass =
-  "border-[#8d3f35]/52 bg-[#d7ad43]/88 text-[#252d43] shadow-[inset_0_1px_0_rgba(255,255,255,0.34),inset_0_-2px_0_rgba(112,73,35,0.12),0_6px_16px_rgba(52,38,31,0.11)] hover:border-[#8d3f35]/62 hover:bg-[#d3a63d]";
+  "border-[#d9261c]/100 bg-[#f7c200]/88 text-[#252d43] shadow-[inset_0_1px_0_rgba(255,255,255,0.34),inset_0_-2px_0_rgba(112,73,35,0.12),0_6px_16px_rgba(52,38,31,0.11)] hover:border-[#8d3f35]/62 hover:bg-[#d3a63d]";
 const bricolageButtonStyle = {
   fontFamily: '"Bricolage Grotesque", sans-serif',
   fontWeight: 680,
@@ -157,6 +157,12 @@ type PendingMateReport = {
   status: MateReportStatus;
 };
 
+type DirectionsTarget = {
+  name: string;
+  address?: string;
+  position: [number, number];
+};
+
 type SuggestionDetails = {
   hours?: OpeningInterval[][];
   rawOpeningHours?: string | null;
@@ -200,7 +206,7 @@ const timeOptions = Array.from({ length: 48 }, (_, index) => {
 
 const createEmptyAdminForm = (): AdminPlaceForm => ({
   name: "",
-  type: "cafe",
+  type: "unknown",
   latitude: "",
   longitude: "",
   info: "Club Mate verkrijgbaar",
@@ -214,7 +220,7 @@ const createEmptySpotForm = (): SpotForm => ({
   info: "",
   latitude: null,
   longitude: null,
-  type: "shop",
+  type: "unknown",
   hours: Array.from({ length: 7 }, () => [] as OpeningInterval[]),
   placeId: undefined,
 });
@@ -373,7 +379,11 @@ const formatHours = (hours: Place["hours"], todayIndex: number) =>
     };
   });
 
-const typeLabel = (type: Place["type"]) => (type === "cafe" ? "Café" : "Supermarkt");
+const typeLabel = (type: Place["type"]) => {
+  if (type === "cafe") return "Café";
+  if (type === "shop") return "Supermarkt";
+  return "Onbekend";
+};
 
 const reportStatusLabel = (status: MateReportStatus) =>
   status === "present" ? "Club Mate aanwezig" : "Niet meer aanwezig";
@@ -455,6 +465,22 @@ const formatReportDate = (value: string) => {
   }).format(date);
 };
 
+const getDirectionsQuery = (target: DirectionsTarget) =>
+  encodeURIComponent(target.address?.trim() || `${target.name} ${target.position[0]},${target.position[1]}`);
+
+const getAppleMapsUrl = (target: DirectionsTarget) =>
+  `https://maps.apple.com/?daddr=${getDirectionsQuery(target)}&dirflg=w`;
+
+const getGoogleMapsUrl = (target: DirectionsTarget) =>
+  `https://www.google.com/maps/dir/?api=1&destination=${getDirectionsQuery(target)}`;
+
+const getAutomaticDirectionsUrl = (target: DirectionsTarget) => {
+  const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  const isAppleDevice = /iPhone|iPad|iPod|Macintosh/.test(userAgent);
+
+  return isAppleDevice ? getAppleMapsUrl(target) : getGoogleMapsUrl(target);
+};
+
 function OpenBadge({ status }: { status: OpenStatus }) {
   return (
     <div className="inline-flex items-center gap-2 rounded-full border border-white/55 bg-[#fff8e8]/72 px-3 py-1.5 text-sm font-semibold text-[#46362d] shadow-[inset_0_1px_0_rgba(255,255,255,0.65),0_8px_18px_rgba(52,38,31,0.08)] backdrop-blur">
@@ -473,6 +499,7 @@ function PlaceDetails({
   distance,
   mateReport,
   onMateReport,
+  onOpenDirections,
   onClose,
   todayIndex,
 }: {
@@ -481,6 +508,7 @@ function PlaceDetails({
   distance?: number;
   mateReport?: MateReport;
   onMateReport: (placeName: string, status: MateReportStatus) => void;
+  onOpenDirections: (target: DirectionsTarget) => void;
   onClose?: () => void;
   todayIndex: number;
 }) {
@@ -510,7 +538,21 @@ function PlaceDetails({
 
       <div className="retro-soft-card space-y-1 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
         <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Adres</div>
-        <div className="text-sm text-slate-800">{place.address ?? "Adres onbekend"}</div>
+        {place.address ? (
+          <button
+            type="button"
+            className="text-left text-sm font-medium text-[#26304a] underline decoration-[#9f4a3d]/35 underline-offset-4 transition hover:text-[#8d3f35] hover:decoration-[#8d3f35]/60"
+            onClick={() => onOpenDirections({
+              name: place.name,
+              address: place.address,
+              position: place.position,
+            })}
+          >
+            {place.address}
+          </button>
+        ) : (
+          <div className="text-sm text-slate-800">Adres onbekend</div>
+        )}
       </div>
 
       <div className="retro-soft-card space-y-1 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
@@ -728,6 +770,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [isSubmittingSpot, setIsSubmittingSpot] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const [selectedPlaceName, setSelectedPlaceName] = useState<string | null>(null);
   const [focusTarget, setFocusTarget] = useState<[number, number] | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -1011,18 +1054,21 @@ export default function MapClient({ places }: { places: Place[] }) {
   const selectViewMode = (mode: "map" | "list") => {
     setSelectedPlaceName(null);
     setSpotFormOpen(false);
+    setInfoPanelOpen(false);
     setViewMode(mode);
   };
 
   const selectFilter = (value: string) => {
     setSelectedPlaceName(null);
     setSpotFormOpen(false);
-    setFilter(value);
+    setInfoPanelOpen(false);
+    setFilter((currentFilter) => currentFilter === value && value !== "all" ? "all" : value);
   };
 
   const toggleOpenNowOnly = () => {
     setSelectedPlaceName(null);
     setSpotFormOpen(false);
+    setInfoPanelOpen(false);
     setOpenNowOnly((currentValue) => !currentValue);
   };
 
@@ -1077,6 +1123,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const openSpotForm = () => {
     setSelectedPlaceName(null);
     setAdminPanelOpen(false);
+    setInfoPanelOpen(false);
     setSpotForm(createEmptySpotForm());
     setSpotSuggestions([]);
     setSpotSuggestionMessage(null);
@@ -1372,7 +1419,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       info: "",
       latitude,
       longitude,
-      type: details?.type ?? suggestion.type ?? "shop",
+      type: details?.type ?? suggestion.type ?? "unknown",
       hours: details?.hours ?? Array.from({ length: 7 }, () => [] as OpeningInterval[]),
       placeId: suggestion.placeId,
     });
@@ -1528,7 +1575,11 @@ export default function MapClient({ places }: { places: Place[] }) {
     setPendingMateReport(null);
   };
 
-  const showFloatingUi = !adminPanelOpen && !spotFormOpen;
+  const openDirections = (target: DirectionsTarget) => {
+    window.open(getAutomaticDirectionsUrl(target), "_blank", "noreferrer");
+  };
+
+  const showFloatingUi = !adminPanelOpen && !spotFormOpen && !infoPanelOpen;
 
   return (
     <div className="relative h-svh w-screen overflow-hidden bg-slate-100">
@@ -1557,12 +1608,27 @@ export default function MapClient({ places }: { places: Place[] }) {
               onClick={() => {
                 setSelectedPlaceName(null);
                 setSpotFormOpen(false);
+                setInfoPanelOpen(false);
                 setAdminPanelOpen((isOpen) => !isOpen);
               }}
               aria-label="Beheer"
               title="Beheer"
             >
               ⚙
+            </button>
+            <button
+              type="button"
+              className={`${infoPanelOpen ? toolbarActiveButtonClass : toolbarButtonClass} flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[13px] font-bold leading-none transition duration-200 ease-out sm:h-9 sm:w-9`}
+              onClick={() => {
+                setSelectedPlaceName(null);
+                setSpotFormOpen(false);
+                setAdminPanelOpen(false);
+                setInfoPanelOpen(true);
+              }}
+              aria-label="Info over deze website"
+              title="Info"
+            >
+              i
             </button>
           </div>
           <div className="flex items-center gap-1.5 rounded-[18px] border border-[#9f4a3d]/28 bg-[#efe0c6]/74 p-1.5 shadow-[0_12px_28px_rgba(52,38,31,0.12)] backdrop-blur-md sm:rounded-l-none sm:border-l-0 sm:p-2">
@@ -1700,6 +1766,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                     >
                       <option value="cafe">Café</option>
                       <option value="shop">Supermarkt</option>
+                      <option value="unknown">Onbekend</option>
                     </select>
                   </label>
                 </div>
@@ -1961,7 +2028,7 @@ export default function MapClient({ places }: { places: Place[] }) {
           keyboard={false}
           boxZoom={false}
           doubleClickZoom
-          touchZoom={false}
+          touchZoom
           tapHold={false}
         >
         <MapViewportController focusTarget={focusTarget} />
@@ -2042,21 +2109,19 @@ export default function MapClient({ places }: { places: Place[] }) {
       {showFloatingUi && (
         <button
           type="button"
-          className={`${bricolageGrotesque.className} absolute bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-[1000] flex h-10 w-[min(68vw,210px)] -translate-x-1/2 items-center justify-center rounded-xl border border-[#9f4a3d]/55 bg-[#e5bd48] px-3.5 text-center text-[13px] font-semibold tracking-[0.01em] text-[#26304a] shadow-[0_16px_38px_rgba(52,38,31,0.18)] backdrop-blur-md transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-[#d8ac38] hover:shadow-[0_20px_46px_rgba(52,38,31,0.22)] active:translate-y-0 sm:bottom-4 sm:h-10 sm:w-[200px]`}
+          className="absolute bottom-[calc(env(safe-area-inset-bottom)+2rem)] left-1/2 z-[1000] grid h-11 w-[min(76vw,240px)] -translate-x-1/2 place-items-center overflow-hidden rounded-xl border border-4 border border-[#d9261c]/100 bg-[#f7c200]/78 shadow-[0_16px_38px_rgba(52,38,31,0.18)] backdrop-blur-md transition duration-200 hover:border-[#d9261c]/100 hover:ring-4 hover:ring-[#d9261c]/100 hover:shadow-[0_20px_46px_rgba(52,38,31,0.22)] active:translate-y-0 sm:bottom-4 sm:h-12 sm:w-[260px]"
           style={bricolageButtonStyle}
           onClick={openSpotForm}
+          aria-label="Nieuwe Club Mate spot melden"
         >
-          <span className="flex items-center gap-2">
-            <Image
-              src="/club-mate-logo.png"
-              alt=""
-              aria-hidden="true"
-              width={86}
-              height={24}
-              className="h-5 w-auto object-contain sm:h-4"
-            />
-            <span>Gespot!</span>
-          </span>
+          <Image
+            src="/mate%20alert.png"
+            alt=""
+            aria-hidden="true"
+            width={905}
+            height={100}
+            className="h-auto w-[94%] object-contain"
+          />
         </button>
       )}
 
@@ -2170,10 +2235,45 @@ export default function MapClient({ places }: { places: Place[] }) {
         </div>
       )}
 
+      {infoPanelOpen && (
+        <div className="fixed inset-0 z-[1150] grid place-items-center bg-slate-950/40 p-3 backdrop-blur-sm sm:p-6" onClick={() => setInfoPanelOpen(false)}>
+          <div
+            className="retro-modal w-full max-w-md rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/90 p-5 text-slate-800 shadow-[0_28px_80px_rgba(52,38,31,0.28)] backdrop-blur-xl sm:p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Info</div>
+                <div className="retro-display mt-1 text-2xl leading-tight text-[#2f2822]">Club Mate Antwerpen</div>
+              </div>
+              <button
+                type="button"
+                className={accentIconButtonClass}
+                onClick={() => setInfoPanelOpen(false)}
+                aria-label="Sluit info"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
+              <p>
+                Deze kaart verzamelt plekken in Antwerpen waar je Club Mate kan vinden: cafés, winkels en andere spots.
+              </p>
+              <p>
+                Gebruik de filters bovenaan om te wisselen tussen kaart en lijst, categorieën te tonen of enkel plekken te zien die nu open zijn.
+              </p>
+              <p>
+                Tik op een pin of locatie voor adres, openingsuren en voorraadmeldingen. Met “Gespot!” kan je een nieuwe plek doorgeven.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedPlace && (
         <div className="fixed inset-0 z-[1100] flex items-end justify-center p-3 sm:items-end sm:justify-end sm:p-4" onClick={() => setSelectedPlaceName(null)}>
           <div
-            className="retro-info-panel w-full max-w-md overflow-auto rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/84 p-3.5 shadow-[0_28px_80px_rgba(52,38,31,0.3)] backdrop-blur-xl sm:max-h-[78svh] sm:p-5"
+            className="retro-info-panel max-h-[calc(100svh-1.5rem)] w-full max-w-md overflow-auto rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/84 p-3.5 shadow-[0_28px_80px_rgba(52,38,31,0.3)] backdrop-blur-xl sm:max-h-[78svh] sm:p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <PlaceDetails
@@ -2183,6 +2283,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               distance={selectedPlaceDistance}
               mateReport={getMateReport(selectedPlace.name)}
               onMateReport={(placeName, status) => setPendingMateReport({ placeName, status })}
+              onOpenDirections={openDirections}
               onClose={() => setSelectedPlaceName(null)}
               todayIndex={todayIndex}
             />

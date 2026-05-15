@@ -2,7 +2,7 @@ const getGoogleApiKey = () => process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOO
 
 const mapGoogleTypeToPlaceType = (types?: string[]) => {
   if (!Array.isArray(types)) {
-    return undefined;
+    return "unknown";
   }
 
   if (types.some((type) => type.includes("supermarket") || type.includes("grocery_store") || type.includes("convenience_store"))) {
@@ -13,7 +13,7 @@ const mapGoogleTypeToPlaceType = (types?: string[]) => {
     return "cafe";
   }
 
-  return undefined;
+  return "unknown";
 };
 
 export async function GET(request: Request) {
@@ -193,7 +193,7 @@ export async function GET(request: Request) {
               ? "shop"
               : properties.category?.includes("catering") || properties.category?.includes("accommodation")
                 ? "cafe"
-                : undefined,
+                : "unknown",
           latitude: Number(coordinates[1]),
           longitude: Number(coordinates[0]),
         };

@@ -196,11 +196,11 @@ textarea:focus {
 }
 
 .map-surface .leaflet-bottom.leaflet-right {
-  margin: 0 12px calc(env(safe-area-inset-bottom) + 68px) 0;
+  margin: 0 12px calc(env(safe-area-inset-bottom) + 8px) 0;
 }
 
 .map-surface .leaflet-bottom.leaflet-left {
-  margin: 0 0 calc(env(safe-area-inset-bottom) + 10px) 8px;
+  margin: 0 0 calc(env(safe-area-inset-bottom) + 8px) 8px;
 }
 
 .map-surface .leaflet-control-attribution {

@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@plasmicapp/loader-nextjs": "^2.0.4",
+    "@plasmicapp/react-web": "^1.0.8",
     "leaflet": "^1.9.4",
     "next": "16.2.6",
     "react": "19.2.4",
@@ -16,6 +18,7 @@
     "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
+    "@plasmicapp/cli": "^0.1.361",
     "@tailwindcss/postcss": "^4",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",

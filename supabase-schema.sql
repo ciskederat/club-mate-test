@@ -3,7 +3,7 @@ create extension if not exists pgcrypto;
 create table if not exists places (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  type text not null check (type in ('cafe', 'shop')),
+  type text not null check (type in ('cafe', 'shop', 'unknown')),
   address text,
   latitude double precision not null,
   longitude double precision not null,

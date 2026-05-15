@@ -10,7 +10,7 @@ export type Place = {
   name: string;
   position: [number, number];
   info: string;
-  type: "cafe" | "shop";
+  type: "cafe" | "shop" | "unknown";
   address?: string;
   hours?: OpeningInterval[][];
   presentCount?: number;
