@@ -24,10 +24,18 @@ export async function POST(request: Request) {
     id: body.place.id,
     previousName: body.previousName,
     place: body.place,
-  }).catch(() => null);
+  }).catch((error) => {
+    const message = error instanceof Error ? error.message : "";
 
-  if (!place) {
-    return Response.json({ error: "Database opslaan is mislukt." }, { status: 500 });
+    if (message.includes("places_type_check") || message.includes("check constraint")) {
+      throw new Error("Database laat type 'unknown' nog niet toe. Voer de Supabase type-migratie uit.");
+    }
+
+    throw error;
+  }).catch((error) => error);
+
+  if (place instanceof Error) {
+    return Response.json({ error: place.message || "Database opslaan is mislukt." }, { status: 500 });
   }
 
   return Response.json({ place });

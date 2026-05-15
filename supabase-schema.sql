@@ -17,6 +17,9 @@ create table if not exists places (
   updated_at timestamptz not null default now()
 );
 
+alter table places drop constraint if exists places_type_check;
+alter table places add constraint places_type_check check (type in ('cafe', 'shop', 'unknown'));
+
 create unique index if not exists places_name_unique on places (name);
 
 insert into places (name, type, address, latitude, longitude, info, hours)
