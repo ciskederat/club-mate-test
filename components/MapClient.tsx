@@ -47,6 +47,13 @@ const filterOptions = [
   { value: "shop", label: "Supermarkten" },
 ];
 
+const accentButtonClass =
+  "rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[rgba(236,0,0,1)] shadow-sm transition hover:bg-[rgba(235,150,49,1)]";
+const accentButtonActiveClass =
+  "rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(235,150,49,1)] text-[rgba(236,0,0,1)] shadow-sm ring-2 ring-[rgba(236,0,0,0.15)] transition";
+const accentIconButtonClass =
+  "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[rgba(236,0,0,1)] transition hover:bg-[rgba(235,150,49,1)]";
+
 const defaultPlaceDetails: Record<string, Pick<Place, "address" | "hours">> = {
   korsakov: {
     address: "Sint-Jorispoort 1, 2000 Antwerpen",
@@ -463,7 +470,7 @@ function PlaceDetails({
         {onClose && (
           <button
             type="button"
-            className="sticky top-0 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-lg text-slate-700 transition hover:bg-slate-200"
+            className={`${accentIconButtonClass} sticky top-0 text-lg`}
             onClick={onClose}
             aria-label="Sluit infovenster"
           >
@@ -489,14 +496,14 @@ function PlaceDetails({
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            className="min-h-11 rounded-full bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100"
+            className={`${accentButtonClass} min-h-11 px-4 py-2 text-sm font-medium`}
             onClick={() => onMateReport(place.name, "present")}
           >
             Club Mate aanwezig
           </button>
           <button
             type="button"
-            className="min-h-11 rounded-full bg-rose-50 px-4 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-100"
+            className={`${accentButtonClass} min-h-11 px-4 py-2 text-sm font-medium`}
             onClick={() => onMateReport(place.name, "absent")}
           >
             Niet meer aanwezig
@@ -527,7 +534,7 @@ function PlaceDetails({
       <div className="space-y-2">
         <button
           type="button"
-          className="flex min-h-11 w-full items-center justify-between rounded-full bg-slate-100 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-200"
+          className={`${accentButtonClass} flex min-h-11 w-full items-center justify-between px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide`}
           onClick={() => setHoursOpen((isOpen) => !isOpen)}
           aria-expanded={hoursOpen}
         >
@@ -1437,33 +1444,21 @@ export default function MapClient({ places }: { places: Place[] }) {
         <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-wrap justify-center gap-2 rounded-[1.75rem] bg-white/96 p-2.5 shadow-lg backdrop-blur sm:left-4 sm:right-auto sm:top-4 sm:justify-start sm:p-3">
         <button
           type="button"
-          className={`min-h-10 rounded-full px-4 py-2 text-sm transition sm:min-h-0 sm:py-2 ${
-            viewMode === "map"
-              ? "bg-slate-900 text-white"
-              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-          }`}
+          className={`${viewMode === "map" ? accentButtonActiveClass : accentButtonClass} min-h-10 px-4 py-2 text-sm sm:min-h-0 sm:py-2`}
           onClick={() => selectViewMode("map")}
         >
           Kaart
         </button>
         <button
           type="button"
-          className={`min-h-10 rounded-full px-4 py-2 text-sm transition sm:min-h-0 sm:py-2 ${
-            viewMode === "list"
-              ? "bg-slate-900 text-white"
-              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-          }`}
+          className={`${viewMode === "list" ? accentButtonActiveClass : accentButtonClass} min-h-10 px-4 py-2 text-sm sm:min-h-0 sm:py-2`}
           onClick={() => selectViewMode("list")}
         >
           Lijst
         </button>
         <button
           type="button"
-          className={`min-h-10 rounded-full px-4 py-2 text-sm transition sm:min-h-0 sm:py-2 ${
-            adminPanelOpen
-              ? "bg-slate-900 text-white"
-              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-          }`}
+          className={`${adminPanelOpen ? accentButtonActiveClass : accentButtonClass} min-h-10 px-4 py-2 text-sm sm:min-h-0 sm:py-2`}
           onClick={() => {
             setSelectedPlaceName(null);
             setSpotFormOpen(false);
@@ -1482,11 +1477,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             <button
               key={option.value}
               type="button"
-              className={`min-h-10 rounded-full px-2 py-2 text-sm transition sm:min-h-0 sm:px-4 sm:py-2 ${
-                filter === option.value
-                  ? "bg-slate-900 text-white"
-                  : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-              }`}
+              className={`${filter === option.value ? accentButtonActiveClass : accentButtonClass} min-h-10 px-2 py-2 text-sm sm:min-h-0 sm:px-4 sm:py-2`}
               onClick={() => selectFilter(option.value)}
             >
               {option.label}
@@ -1495,16 +1486,12 @@ export default function MapClient({ places }: { places: Place[] }) {
         </div>
         <button
           type="button"
-          className={`flex min-h-10 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm transition sm:min-h-0 sm:py-2 ${
-            openNowOnly
-              ? "bg-emerald-600 text-white"
-              : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-          }`}
+          className={`${openNowOnly ? accentButtonActiveClass : accentButtonClass} flex min-h-10 items-center justify-center gap-2 px-3 py-2 text-sm sm:min-h-0 sm:py-2`}
           onClick={toggleOpenNowOnly}
           aria-pressed={openNowOnly}
         >
           <span
-            className={`h-2 w-2 rounded-full ${openNowOnly ? "bg-white" : "bg-slate-400"}`}
+            className={`h-2 w-2 rounded-full ${openNowOnly ? "bg-[rgba(236,0,0,1)]" : "bg-[rgba(236,0,0,0.55)]"}`}
             aria-hidden="true"
           />
           Nu open
@@ -1525,7 +1512,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             </div>
             <button
               type="button"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200"
+              className={accentIconButtonClass}
               onClick={() => setAdminPanelOpen(false)}
               aria-label="Sluit beheer"
             >
@@ -1552,7 +1539,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               {adminError && <div className="text-sm text-rose-600">{adminError}</div>}
               <button
                 type="button"
-                className="min-h-11 rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
+                className={`${accentButtonClass} min-h-11 px-5 py-3 text-sm font-medium`}
                 onClick={unlockAdmin}
               >
                 Ontgrendel beheer
@@ -1564,7 +1551,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                 <div className="space-y-3">
                 <button
                   type="button"
-                  className="min-h-11 w-full rounded-full bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
+                  className={`${accentButtonClass} min-h-11 w-full px-4 py-3 text-sm font-medium`}
                   onClick={startAddingPlace}
                 >
                   Nieuwe locatie
@@ -1576,8 +1563,8 @@ export default function MapClient({ places }: { places: Place[] }) {
                       type="button"
                       className={`min-h-12 w-full rounded-2xl border px-4 py-3 text-left text-sm transition ${
                         normalizeType(editingPlaceName) === normalizeType(place.name)
-                          ? "border-slate-900 bg-slate-100 text-slate-950"
-                          : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                          ? "border-[rgba(236,0,0,1)] bg-[rgba(235,150,49,1)] text-[rgba(236,0,0,1)] ring-2 ring-[rgba(236,0,0,0.15)]"
+                          : "border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[rgba(236,0,0,1)] hover:bg-[rgba(235,150,49,1)]"
                       }`}
                       onClick={() => startEditingPlace(place)}
                     >
@@ -1717,14 +1704,14 @@ export default function MapClient({ places }: { places: Place[] }) {
                       </label>
                       <button
                         type="button"
-                        className="min-h-11 rounded-full bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
+                        className={`${accentButtonClass} min-h-11 px-4 py-3 text-sm font-medium`}
                         onClick={applyQuickHours}
                       >
                         Toepassen
                       </button>
                       <button
                         type="button"
-                        className="min-h-11 rounded-full bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                        className={`${accentButtonClass} min-h-11 px-4 py-3 text-sm font-medium`}
                         onClick={closeQuickHours}
                       >
                         Gesloten
@@ -1732,7 +1719,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                     </div>
                     <button
                       type="button"
-                      className="min-h-10 w-full rounded-full bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 sm:w-auto"
+                      className={`${accentButtonClass} min-h-10 w-full px-4 py-3 text-sm font-medium sm:w-auto`}
                       onClick={() => setAdminForm((form) => ({ ...form, dayHours: createEmptyHours() }))}
                     >
                       Alles leegmaken
@@ -1844,7 +1831,7 @@ export default function MapClient({ places }: { places: Place[] }) {
 
                 <button
                   type="submit"
-                  className="min-h-11 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 sm:w-auto"
+                  className={`${accentButtonClass} min-h-11 w-full px-5 py-3 text-sm font-medium sm:w-auto`}
                 >
                   Locatie opslaan
                 </button>
@@ -1947,7 +1934,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               </div>
               <button
                 type="button"
-                className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200"
+                className={accentIconButtonClass}
                 onClick={closeSpotForm}
                 aria-label="Sluit formulier"
               >
@@ -1988,7 +1975,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                       <button
                         key={`${suggestion.placeId ?? suggestion.label}-${suggestion.latitude}-${suggestion.longitude}`}
                         type="button"
-                        className="block w-full border-t border-slate-100 px-4 py-3 text-left text-sm text-slate-700 transition first:border-t-0 hover:bg-slate-50"
+                        className="block w-full border-t border-[rgba(236,0,0,0.2)] bg-[rgba(247,194,0,0.45)] px-4 py-3 text-left text-sm text-[rgba(236,0,0,1)] transition first:border-t-0 hover:bg-[rgba(235,150,49,0.55)]"
                         onClick={() => selectSpotSuggestion(suggestion)}
                       >
                         <span className="block font-medium">{suggestion.name}</span>
@@ -2032,7 +2019,7 @@ export default function MapClient({ places }: { places: Place[] }) {
 
                 <button
                   type="button"
-                  className="min-h-11 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60"
+                  className={`${accentButtonClass} min-h-11 w-full px-5 py-3 text-sm font-medium disabled:opacity-60`}
                   onClick={submitSpotForm}
                   disabled={isSubmittingSpot}
                 >
@@ -2074,14 +2061,14 @@ export default function MapClient({ places }: { places: Place[] }) {
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                className="min-h-11 rounded-full bg-slate-100 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+                className={`${accentButtonClass} min-h-11 px-4 py-3 text-sm font-medium`}
                 onClick={() => setPendingMateReport(null)}
               >
                 Annuleer
               </button>
               <button
                 type="button"
-                className="min-h-11 rounded-full bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
+                className={`${accentButtonClass} min-h-11 px-4 py-3 text-sm font-medium`}
                 onClick={confirmPendingMateReport}
               >
                 Bevestigen
