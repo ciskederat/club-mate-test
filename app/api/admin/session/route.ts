@@ -1,5 +1,5 @@
 const isValidAdminPin = (pin: unknown) =>
-  typeof pin === "string" && Boolean(process.env.ADMIN_PIN) && pin === process.env.ADMIN_PIN;
+  typeof pin === "string" && Boolean(process.env.ADMIN_PIN) && pin.trim() === process.env.ADMIN_PIN?.trim();
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);

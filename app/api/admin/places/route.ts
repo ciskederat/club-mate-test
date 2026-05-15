@@ -3,7 +3,7 @@ import { savePlace, updateReportCounts } from "@/lib/placesDatabase";
 
 const isValidAdminPin = (request: Request) => {
   const pin = request.headers.get("x-admin-pin");
-  return Boolean(process.env.ADMIN_PIN) && pin === process.env.ADMIN_PIN;
+  return Boolean(process.env.ADMIN_PIN) && pin?.trim() === process.env.ADMIN_PIN?.trim();
 };
 
 export async function POST(request: Request) {

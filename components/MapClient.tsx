@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet";
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import type { MateReportStatus, OpeningInterval, Place } from "@/data/placeTypes";
@@ -16,10 +16,14 @@ type AdminPlaceForm = {
   dayHours: string[];
 };
 
-type AddressSuggestion = {
+type PlaceSuggestion = {
+  placeId?: string;
+  placeResourceName?: string;
   label: string;
-  latitude: number;
-  longitude: number;
+  name: string;
+  type?: Place["type"];
+  latitude?: number;
+  longitude?: number;
 };
 
 const icon = new L.Icon({
@@ -84,6 +88,7 @@ const defaultPlaceDetails: Record<string, Pick<Place, "address" | "hours">> = {
 
 const dayLabels = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
 const shortDayLabels = ["zo", "ma", "di", "wo", "do", "vr", "za"];
+const displayDayOrder = [1, 2, 3, 4, 5, 6, 0];
 const weekdayToIndex: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -118,6 +123,28 @@ type PendingMateReport = {
   status: MateReportStatus;
 };
 
+type SuggestionDetails = {
+  hours?: OpeningInterval[][];
+  rawOpeningHours?: string | null;
+  address?: string | null;
+  name?: string | null;
+  website?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  type?: Place["type"];
+};
+
+type SpotForm = {
+  name: string;
+  address: string;
+  info: string;
+  latitude: number | null;
+  longitude: number | null;
+  type: Place["type"];
+  hours: OpeningInterval[][];
+  placeId?: string;
+};
+
 const mateReportsStorageKey = "clubmate-map-reports";
 const adminSessionStorageKey = "clubmate-map-admin-unlocked";
 const adminSessionPasscodeKey = "clubmate-map-admin-code";
@@ -145,6 +172,17 @@ const createEmptyAdminForm = (): AdminPlaceForm => ({
   info: "Club Mate verkrijgbaar",
   address: "",
   dayHours: createEmptyHours(),
+});
+
+const createEmptySpotForm = (): SpotForm => ({
+  name: "",
+  address: "",
+  info: "",
+  latitude: null,
+  longitude: null,
+  type: "shop",
+  hours: Array.from({ length: 7 }, () => [] as OpeningInterval[]),
+  placeId: undefined,
 });
 
 const formatHoursForAdmin = (hours: Place["hours"]) =>
@@ -286,13 +324,20 @@ const getOpenStatus = (place: Place, now: Date): OpenStatus => {
   };
 };
 
-const formatHours = (hours: Place["hours"]) =>
-  (hours ?? []).map((intervals, index) => ({
-    day: shortDayLabels[index],
-    value: intervals.length === 0
-      ? "Gesloten"
-      : intervals.map((interval) => `${interval.open}-${interval.close}`).join(", "),
-  }));
+const formatHours = (hours: Place["hours"], todayIndex: number) =>
+  displayDayOrder.map((index) => {
+    const intervals = hours?.[index] ?? [];
+
+    return {
+      key: shortDayLabels[index],
+      day: dayLabels[index],
+      shortDay: shortDayLabels[index],
+      isToday: index === todayIndex,
+      value: intervals.length === 0
+        ? "Gesloten"
+        : intervals.map((interval) => `${interval.open} - ${interval.close}`).join(", "),
+    };
+  });
 
 const typeLabel = (type: Place["type"]) => (type === "cafe" ? "Café" : "Supermarkt");
 
@@ -395,6 +440,7 @@ function PlaceDetails({
   mateReport,
   onMateReport,
   onClose,
+  todayIndex,
 }: {
   place: Place;
   status: OpenStatus;
@@ -402,21 +448,22 @@ function PlaceDetails({
   mateReport?: MateReport;
   onMateReport: (placeName: string, status: MateReportStatus) => void;
   onClose?: () => void;
+  todayIndex: number;
 }) {
   const [hoursOpen, setHoursOpen] = useState(false);
-  const formattedHours = formatHours(place.hours);
+  const formattedHours = formatHours(place.hours, todayIndex);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <div className="space-y-5">
+      <div className="sticky top-0 z-10 -mx-1 -mt-1 flex items-start justify-between gap-4 rounded-t-[1.75rem] bg-white px-1 pt-1">
+        <div className="pr-2">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{typeLabel(place.type)}</div>
           <div className="text-xl font-semibold text-slate-950">{place.name}</div>
         </div>
         {onClose && (
           <button
             type="button"
-            className="grid h-8 w-8 place-items-center rounded bg-slate-100 text-slate-700 transition hover:bg-slate-200"
+            className="sticky top-0 grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-lg text-slate-700 transition hover:bg-slate-200"
             onClick={onClose}
             aria-label="Sluit infovenster"
           >
@@ -437,19 +484,19 @@ function PlaceDetails({
         <div className="text-sm text-slate-800">{place.info}</div>
       </div>
 
-      <div className="space-y-2 rounded border border-slate-200 p-3">
+      <div className="space-y-2 rounded-3xl border border-slate-200 p-4">
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Club Mate voorraad</div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            className="min-h-11 rounded bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100"
+            className="min-h-11 rounded-full bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100"
             onClick={() => onMateReport(place.name, "present")}
           >
             Club Mate aanwezig
           </button>
           <button
             type="button"
-            className="min-h-11 rounded bg-rose-50 px-3 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-100"
+            className="min-h-11 rounded-full bg-rose-50 px-4 py-2 text-sm font-medium text-rose-800 transition hover:bg-rose-100"
             onClick={() => onMateReport(place.name, "absent")}
           >
             Niet meer aanwezig
@@ -480,7 +527,7 @@ function PlaceDetails({
       <div className="space-y-2">
         <button
           type="button"
-          className="flex min-h-11 w-full items-center justify-between rounded bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-200"
+          className="flex min-h-11 w-full items-center justify-between rounded-full bg-slate-100 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 transition hover:bg-slate-200"
           onClick={() => setHoursOpen((isOpen) => !isOpen)}
           aria-expanded={hoursOpen}
         >
@@ -494,16 +541,24 @@ function PlaceDetails({
         </button>
 
         {hoursOpen && (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 px-3 text-sm text-slate-800">
+          <div className="space-y-2">
             {formattedHours.length > 0 ? (
               formattedHours.map((item) => (
-                <div key={item.day} className="contents">
-                  <div className="font-medium text-slate-600">{item.day}</div>
-                  <div>{item.value}</div>
+                <div
+                  key={item.key}
+                  className={`grid grid-cols-[minmax(4rem,auto)_1fr] items-center gap-3 rounded-2xl px-3 py-2 text-sm ${
+                    item.isToday ? "bg-emerald-50 text-emerald-950" : "bg-slate-50 text-slate-800"
+                  }`}
+                >
+                  <div className="font-medium capitalize">
+                    {item.day}
+                    {item.isToday ? " vandaag" : ""}
+                  </div>
+                  <div className="text-right">{item.value}</div>
                 </div>
               ))
             ) : (
-              <div className="col-span-2 text-slate-500">Geen openingsuren bekend.</div>
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-500">Geen openingsuren bekend.</div>
             )}
           </div>
         )}
@@ -530,6 +585,41 @@ const formatDistance = (distance?: number) => {
   if (distance < 1) return `${Math.round(distance * 1000)} m`;
   return `${distance.toFixed(1)} km`;
 };
+
+function MapViewportController({
+  focusTarget,
+}: {
+  focusTarget: [number, number] | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!focusTarget) {
+      return;
+    }
+
+    map.flyTo(focusTarget, Math.max(map.getZoom(), 16), {
+      animate: true,
+      duration: 0.7,
+    });
+  }, [focusTarget, map]);
+
+  return null;
+}
+
+function MapInteractionController({
+  onMapClick,
+}: {
+  onMapClick: () => void;
+}) {
+  useMapEvents({
+    click: () => {
+      onMapClick();
+    },
+  });
+
+  return null;
+}
 
 export default function MapClient({ places }: { places: Place[] }) {
   const [filter, setFilter] = useState("all");
@@ -558,13 +648,22 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [quickHoursScope, setQuickHoursScope] = useState<"all" | "weekdays" | "weekend">("weekdays");
   const [quickHoursOpen, setQuickHoursOpen] = useState("09:00");
   const [quickHoursClose, setQuickHoursClose] = useState("18:00");
-  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [addressSuggestions, setAddressSuggestions] = useState<PlaceSuggestion[]>([]);
   const [isLoadingAddressSuggestions, setIsLoadingAddressSuggestions] = useState(false);
   const [addressSuggestionMessage, setAddressSuggestionMessage] = useState<string | null>(null);
   const [addressSuggestionSelected, setAddressSuggestionSelected] = useState(false);
+  const [spotFormOpen, setSpotFormOpen] = useState(false);
+  const [spotForm, setSpotForm] = useState<SpotForm>(() => createEmptySpotForm());
+  const [spotSuggestions, setSpotSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [spotSuggestionMessage, setSpotSuggestionMessage] = useState<string | null>(null);
+  const [isLoadingSpotSuggestions, setIsLoadingSpotSuggestions] = useState(false);
+  const [spotSuggestionSelected, setSpotSuggestionSelected] = useState(false);
+  const [spotFormMessage, setSpotFormMessage] = useState<string | null>(null);
+  const [isSubmittingSpot, setIsSubmittingSpot] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [selectedPlaceName, setSelectedPlaceName] = useState<string | null>(null);
+  const [focusTarget, setFocusTarget] = useState<[number, number] | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [pendingMateReport, setPendingMateReport] = useState<PendingMateReport | null>(null);
   const [localMateReports, setLocalMateReports] = useState<MateReports>(() => {
@@ -624,6 +723,20 @@ export default function MapClient({ places }: { places: Place[] }) {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (!focusTarget) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setFocusTarget(null);
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [focusTarget]);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -721,8 +834,60 @@ export default function MapClient({ places }: { places: Place[] }) {
     };
   }, [adminForm.address, adminPanelOpen, isAdminUnlocked, addressSuggestionSelected]);
 
+  useEffect(() => {
+    const query = spotForm.name.trim();
+
+    if (!spotFormOpen || spotSuggestionSelected || query.length < 2) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setIsLoadingSpotSuggestions(true);
+
+      fetch(`/api/geocode/suggest?q=${encodeURIComponent(query)}`, {
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const contentType = response.headers.get("content-type") ?? "";
+
+          if (!contentType.includes("application/json")) {
+            throw new Error("NO_JSON");
+          }
+
+          return response.json();
+        })
+        .then((data) => {
+          setSpotSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+          setSpotSuggestionMessage(data.error ?? null);
+        })
+        .catch((error) => {
+          if (error?.name !== "AbortError") {
+            setSpotSuggestions([]);
+            setSpotSuggestionMessage(
+              error?.message === "NO_JSON"
+                ? "Suggesties konden niet geladen worden."
+                : "Zoeken naar locaties is mislukt.",
+            );
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setIsLoadingSpotSuggestions(false);
+          }
+        });
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [spotForm.name, spotFormOpen, spotSuggestionSelected]);
+
   const shouldShowAddressSuggestions =
     adminPanelOpen && isAdminUnlocked && !addressSuggestionSelected && adminForm.address.trim().length >= 3;
+  const shouldShowSpotSuggestions =
+    spotFormOpen && !spotSuggestionSelected && spotForm.name.trim().length >= 2;
 
   const safePlaces = useMemo(
     () =>
@@ -734,6 +899,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       })),
     [databasePlaces],
   );
+  const todayIndex = useMemo(() => getBrusselsTimeParts(now).dayIndex, [now]);
   const normalizedFilter = useMemo(() => normalizeType(filter), [filter]);
   const placeStatuses = useMemo(
     () => new Map(safePlaces.map((place) => [place.name, getOpenStatus(place, now)])),
@@ -778,16 +944,19 @@ export default function MapClient({ places }: { places: Place[] }) {
 
   const selectViewMode = (mode: "map" | "list") => {
     setSelectedPlaceName(null);
+    setSpotFormOpen(false);
     setViewMode(mode);
   };
 
   const selectFilter = (value: string) => {
     setSelectedPlaceName(null);
+    setSpotFormOpen(false);
     setFilter(value);
   };
 
   const toggleOpenNowOnly = () => {
     setSelectedPlaceName(null);
+    setSpotFormOpen(false);
     setOpenNowOnly((currentValue) => !currentValue);
   };
 
@@ -830,12 +999,58 @@ export default function MapClient({ places }: { places: Place[] }) {
     }
   };
 
+  const closeSpotForm = () => {
+    setSpotFormOpen(false);
+    setSpotSuggestions([]);
+    setSpotSuggestionMessage(null);
+    setSpotFormMessage(null);
+    setSpotSuggestionSelected(false);
+    setFocusTarget(null);
+  };
+
+  const openSpotForm = () => {
+    setSelectedPlaceName(null);
+    setAdminPanelOpen(false);
+    setSpotForm(createEmptySpotForm());
+    setSpotSuggestions([]);
+    setSpotSuggestionMessage(null);
+    setSpotFormMessage(null);
+    setSpotSuggestionSelected(false);
+    setSpotFormOpen(true);
+  };
+
+  const fetchSuggestionDetails = async (placeId?: string, placeResourceName?: string): Promise<SuggestionDetails | null> => {
+    if (!placeId && !placeResourceName) {
+      return null;
+    }
+
+    const params = new URLSearchParams();
+
+    if (placeId) {
+      params.set("id", placeId);
+    }
+
+    if (placeResourceName) {
+      params.set("place", placeResourceName);
+    }
+
+    const response = await fetch(`/api/geocode/place-details?${params.toString()}`);
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return data as SuggestionDetails | null;
+  };
+
   const startAddingPlace = () => {
     setEditingPlaceName(null);
     setAdminForm(createEmptyAdminForm());
     setAddressSuggestionSelected(false);
     setAddressSuggestions([]);
     setAddressSuggestionMessage(null);
+    setSpotFormOpen(false);
   };
 
   const startEditingPlace = (place: Place) => {
@@ -846,17 +1061,31 @@ export default function MapClient({ places }: { places: Place[] }) {
     setAddressSuggestionMessage(null);
   };
 
-  const selectAddressSuggestion = (suggestion: AddressSuggestion) => {
+  const selectAddressSuggestion = async (suggestion: PlaceSuggestion) => {
+    const details = await fetchSuggestionDetails(suggestion.placeId, suggestion.placeResourceName);
+    const latitude = details?.latitude ?? suggestion.latitude;
+    const longitude = details?.longitude ?? suggestion.longitude;
+
+    if (latitude == null || longitude == null) {
+      setAdminError("Locatiegegevens ontbreken voor deze suggestie.");
+      return;
+    }
+
     setAdminForm((form) => ({
       ...form,
-      address: suggestion.label,
-      latitude: suggestion.latitude.toFixed(6),
-      longitude: suggestion.longitude.toFixed(6),
+      name: form.name || details?.name || suggestion.name,
+      type: details?.type ?? suggestion.type ?? form.type,
+      address: details?.address || suggestion.label,
+      latitude: latitude.toFixed(6),
+      longitude: longitude.toFixed(6),
+      dayHours: formatHoursForAdmin(details?.hours),
     }));
     setAddressSuggestions([]);
     setAddressSuggestionMessage(null);
     setAddressSuggestionSelected(true);
     setAdminError("Adres gekozen.");
+    setFocusTarget([latitude, longitude]);
+    setViewMode("map");
   };
 
   const updateAdminDayOpenStatus = (index: number, isOpen: boolean) => {
@@ -914,20 +1143,6 @@ export default function MapClient({ places }: { places: Place[] }) {
     setAdminForm((currentForm) => ({
       ...currentForm,
       dayHours: currentForm.dayHours.map((value, index) => selectedIndexes.has(index) ? "" : value),
-    }));
-  };
-
-  const applyHoursPreset = (preset: "supermarket" | "cafe" | "club" | "closed") => {
-    const presetHours: Record<typeof preset, string[]> = {
-      supermarket: ["", "08:00-20:00", "08:00-20:00", "08:00-20:00", "08:00-20:00", "08:00-21:00", "08:00-20:00"],
-      cafe: ["12:00-02:00", "12:00-02:00", "12:00-03:00", "12:00-03:00", "12:00-03:00", "12:00-04:00", "12:00-04:00"],
-      club: ["", "", "", "", "", "23:00-07:00", "23:00-07:00"],
-      closed: createEmptyHours(),
-    };
-
-    setAdminForm((currentForm) => ({
-      ...currentForm,
-      dayHours: presetHours[preset],
     }));
   };
 
@@ -1010,8 +1225,80 @@ export default function MapClient({ places }: { places: Place[] }) {
       setEditingPlaceName(data.place.name);
       setAdminForm(createAdminFormFromPlace(data.place));
       setAdminError("Locatie opgeslagen.");
+      setAdminPanelOpen(false);
     } catch {
       setAdminError("Locatie opslaan is mislukt.");
+    }
+  };
+
+  const selectSpotSuggestion = async (suggestion: PlaceSuggestion) => {
+    const details = await fetchSuggestionDetails(suggestion.placeId, suggestion.placeResourceName);
+    const latitude = details?.latitude ?? suggestion.latitude;
+    const longitude = details?.longitude ?? suggestion.longitude;
+
+    if (latitude == null || longitude == null) {
+      setSpotFormMessage("Locatiegegevens ontbreken voor deze suggestie.");
+      return;
+    }
+
+    setSpotForm({
+      name: details?.name || suggestion.name,
+      address: details?.address || suggestion.label,
+      info: "",
+      latitude,
+      longitude,
+      type: details?.type ?? suggestion.type ?? "shop",
+      hours: details?.hours ?? Array.from({ length: 7 }, () => [] as OpeningInterval[]),
+      placeId: suggestion.placeId,
+    });
+    setSpotSuggestions([]);
+    setSpotSuggestionMessage(null);
+    setSpotSuggestionSelected(true);
+    setSpotFormMessage("Locatie gekozen. Controleer gerust nog even op de kaart.");
+    setSelectedPlaceName(null);
+    setViewMode("map");
+    setFocusTarget([latitude, longitude]);
+  };
+
+  const submitSpotForm = async () => {
+    if (!spotForm.name.trim() || spotForm.latitude == null || spotForm.longitude == null) {
+      setSpotFormMessage("Kies eerst een locatie uit de suggesties.");
+      return;
+    }
+
+    setIsSubmittingSpot(true);
+
+    try {
+      const response = await fetch("/api/places/spot", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: spotForm.name,
+          address: spotForm.address,
+          latitude: spotForm.latitude,
+          longitude: spotForm.longitude,
+          type: spotForm.type,
+          hours: spotForm.hours,
+          info: spotForm.info,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.place) {
+        setSpotFormMessage(data?.error ?? "Locatie toevoegen is mislukt.");
+        return;
+      }
+
+      updatePlaceInState(data.place, spotForm.name);
+      setSelectedPlaceName(data.place.name);
+      setFocusTarget(data.place.position);
+      closeSpotForm();
+    } catch {
+      setSpotFormMessage("Locatie toevoegen is mislukt.");
+    } finally {
+      setIsSubmittingSpot(false);
     }
   };
 
@@ -1117,12 +1404,15 @@ export default function MapClient({ places }: { places: Place[] }) {
     setPendingMateReport(null);
   };
 
+  const showFloatingUi = !adminPanelOpen && !spotFormOpen;
+
   return (
-    <div className="relative h-dvh w-screen overflow-hidden">
-      <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-wrap justify-center gap-2 rounded-xl bg-white p-2 shadow sm:left-4 sm:right-auto sm:top-4 sm:justify-start sm:p-3">
+    <div className="relative h-dvh w-screen overflow-hidden bg-slate-100">
+      {showFloatingUi && (
+        <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-wrap justify-center gap-2 rounded-[1.75rem] bg-white/96 p-2.5 shadow-lg backdrop-blur sm:left-4 sm:right-auto sm:top-4 sm:justify-start sm:p-3">
         <button
           type="button"
-          className={`min-h-10 rounded px-3 py-2 text-sm transition sm:min-h-0 sm:py-1 ${
+          className={`min-h-10 rounded-full px-4 py-2 text-sm transition sm:min-h-0 sm:py-2 ${
             viewMode === "map"
               ? "bg-slate-900 text-white"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1133,7 +1423,7 @@ export default function MapClient({ places }: { places: Place[] }) {
         </button>
         <button
           type="button"
-          className={`min-h-10 rounded px-3 py-2 text-sm transition sm:min-h-0 sm:py-1 ${
+          className={`min-h-10 rounded-full px-4 py-2 text-sm transition sm:min-h-0 sm:py-2 ${
             viewMode === "list"
               ? "bg-slate-900 text-white"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1144,27 +1434,30 @@ export default function MapClient({ places }: { places: Place[] }) {
         </button>
         <button
           type="button"
-          className={`min-h-10 rounded px-3 py-2 text-sm transition sm:min-h-0 sm:py-1 ${
+          className={`min-h-10 rounded-full px-4 py-2 text-sm transition sm:min-h-0 sm:py-2 ${
             adminPanelOpen
               ? "bg-slate-900 text-white"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200"
           }`}
           onClick={() => {
             setSelectedPlaceName(null);
+            setSpotFormOpen(false);
             setAdminPanelOpen((isOpen) => !isOpen);
           }}
         >
           Beheer
         </button>
-      </div>
+        </div>
+      )}
 
-      <div className="absolute left-3 right-3 top-[4.75rem] z-[1000] flex flex-col gap-2 rounded-xl bg-white p-2 shadow sm:left-auto sm:right-4 sm:top-4 sm:p-3">
+      {showFloatingUi && (
+        <div className="absolute left-3 right-3 top-[5.25rem] z-[1000] flex flex-col gap-2 rounded-[1.75rem] bg-white/96 p-2.5 shadow-lg backdrop-blur sm:left-auto sm:right-4 sm:top-4 sm:w-auto sm:min-w-[15rem] sm:p-3">
         <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
           {filterOptions.map((option) => (
             <button
               key={option.value}
               type="button"
-              className={`min-h-10 rounded px-2 py-2 text-sm transition sm:min-h-0 sm:px-3 sm:py-1 ${
+              className={`min-h-10 rounded-full px-2 py-2 text-sm transition sm:min-h-0 sm:px-4 sm:py-2 ${
                 filter === option.value
                   ? "bg-slate-900 text-white"
                   : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1177,7 +1470,7 @@ export default function MapClient({ places }: { places: Place[] }) {
         </div>
         <button
           type="button"
-          className={`flex min-h-10 items-center justify-center gap-2 rounded px-3 py-2 text-sm transition sm:min-h-0 sm:py-1 ${
+          className={`flex min-h-10 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm transition sm:min-h-0 sm:py-2 ${
             openNowOnly
               ? "bg-emerald-600 text-white"
               : "bg-slate-100 text-slate-800 hover:bg-slate-200"
@@ -1191,18 +1484,23 @@ export default function MapClient({ places }: { places: Place[] }) {
           />
           Nu open
         </button>
-      </div>
+        </div>
+      )}
 
       {adminPanelOpen && (
-        <div className="fixed inset-x-0 bottom-0 top-32 z-[1000] overflow-auto rounded-t-xl border border-slate-200 bg-white p-4 shadow-xl sm:absolute sm:bottom-auto sm:left-4 sm:right-4 sm:top-20 sm:mx-auto sm:max-h-[calc(100dvh-7rem)] sm:max-w-3xl sm:rounded-xl sm:p-5">
-          <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-[1200] bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6" onClick={() => setAdminPanelOpen(false)}>
+          <div
+            className="mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+          <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Beheer</div>
               <div className="text-xl font-semibold text-slate-950">Locaties aanpassen</div>
             </div>
             <button
               type="button"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-slate-700 transition hover:bg-slate-200 sm:h-8 sm:w-8"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200"
               onClick={() => setAdminPanelOpen(false)}
               aria-label="Sluit beheer"
             >
@@ -1211,12 +1509,12 @@ export default function MapClient({ places }: { places: Place[] }) {
           </div>
 
           {!isAdminUnlocked ? (
-            <div className="space-y-3">
+            <div className="space-y-4 p-4 sm:p-6">
               <label className="block space-y-1">
                 <span className="text-sm font-medium text-slate-700">Beheer-code</span>
                 <input
                   type="password"
-                  className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                   value={adminPasscodeInput}
                   onChange={(event) => setAdminPasscodeInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -1229,18 +1527,19 @@ export default function MapClient({ places }: { places: Place[] }) {
               {adminError && <div className="text-sm text-rose-600">{adminError}</div>}
               <button
                 type="button"
-                className="min-h-11 rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                className="min-h-11 rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
                 onClick={unlockAdmin}
               >
                 Ontgrendel beheer
               </button>
             </div>
           ) : (
-            <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
-              <div className="space-y-3">
+            <div className="grid flex-1 gap-0 overflow-hidden lg:grid-cols-[20rem_1fr]">
+              <div className="overflow-auto border-b border-slate-100 p-4 lg:border-b-0 lg:border-r lg:p-5">
+                <div className="space-y-3">
                 <button
                   type="button"
-                  className="min-h-11 w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                  className="min-h-11 w-full rounded-full bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
                   onClick={startAddingPlace}
                 >
                   Nieuwe locatie
@@ -1250,7 +1549,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                     <button
                       key={place.name}
                       type="button"
-                      className={`min-h-12 w-full rounded border px-3 py-2 text-left text-sm transition ${
+                      className={`min-h-12 w-full rounded-2xl border px-4 py-3 text-left text-sm transition ${
                         normalizeType(editingPlaceName) === normalizeType(place.name)
                           ? "border-slate-900 bg-slate-100 text-slate-950"
                           : "border-slate-200 text-slate-700 hover:bg-slate-50"
@@ -1263,9 +1562,10 @@ export default function MapClient({ places }: { places: Place[] }) {
                   ))}
                 </div>
               </div>
+              </div>
 
               <form
-                className="space-y-3"
+                className="space-y-4 overflow-auto p-4 sm:p-6"
                 onSubmit={(event) => {
                   event.preventDefault();
                   saveAdminPlace();
@@ -1276,7 +1576,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                     <span className="text-sm font-medium text-slate-700">Naam</span>
                     <input
                       type="text"
-                      className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                       value={adminForm.name}
                       onChange={(event) => setAdminForm((form) => ({ ...form, name: event.target.value }))}
                     />
@@ -1284,7 +1584,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                   <label className="block space-y-1">
                     <span className="text-sm font-medium text-slate-700">Type</span>
                     <select
-                      className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                       value={adminForm.type}
                       onChange={(event) => setAdminForm((form) => ({ ...form, type: event.target.value as Place["type"] }))}
                     >
@@ -1295,10 +1595,10 @@ export default function MapClient({ places }: { places: Place[] }) {
                 </div>
 
                 <label className="block space-y-1">
-                  <span className="text-sm font-medium text-slate-700">Adres</span>
+                  <span className="text-sm font-medium text-slate-700">Locatie zoeken</span>
                   <input
                     type="text"
-                    className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                     value={adminForm.address}
                     onChange={(event) => {
                       setAdminForm((form) => ({ ...form, address: event.target.value }));
@@ -1310,21 +1610,22 @@ export default function MapClient({ places }: { places: Place[] }) {
                 </label>
 
                 {shouldShowAddressSuggestions && (isLoadingAddressSuggestions || addressSuggestions.length > 0 || addressSuggestionMessage) && (
-                  <div className="overflow-hidden rounded border border-slate-200 bg-white">
+                  <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
                     {isLoadingAddressSuggestions && (
-                      <div className="px-3 py-2 text-sm text-slate-500">Suggesties zoeken...</div>
+                      <div className="px-4 py-3 text-sm text-slate-500">Suggesties zoeken...</div>
                     )}
                     {!isLoadingAddressSuggestions && addressSuggestionMessage && addressSuggestions.length === 0 && (
-                      <div className="px-3 py-2 text-sm text-slate-500">{addressSuggestionMessage}</div>
+                      <div className="px-4 py-3 text-sm text-slate-500">{addressSuggestionMessage}</div>
                     )}
                     {addressSuggestions.map((suggestion) => (
                       <button
-                        key={`${suggestion.latitude}-${suggestion.longitude}-${suggestion.label}`}
+                        key={`${suggestion.placeId ?? suggestion.label}-${suggestion.latitude}-${suggestion.longitude}`}
                         type="button"
-                        className="block w-full border-t border-slate-100 px-3 py-3 text-left text-sm text-slate-700 transition first:border-t-0 hover:bg-slate-50"
+                        className="block w-full border-t border-slate-100 px-4 py-3 text-left text-sm text-slate-700 transition first:border-t-0 hover:bg-slate-50"
                         onClick={() => selectAddressSuggestion(suggestion)}
                       >
-                        {suggestion.label}
+                        <span className="block font-medium">{suggestion.name}</span>
+                        <span className="block text-xs text-slate-500">{suggestion.label}</span>
                       </button>
                     ))}
                   </div>
@@ -1333,7 +1634,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                 <label className="block space-y-1">
                   <span className="text-sm font-medium text-slate-700">Info</span>
                   <textarea
-                    className="min-h-20 w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                    className="min-h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                     value={adminForm.info}
                     onChange={(event) => setAdminForm((form) => ({ ...form, info: event.target.value }))}
                   />
@@ -1341,36 +1642,13 @@ export default function MapClient({ places }: { places: Place[] }) {
 
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-slate-700">Openingsuren</div>
-                  <div className="space-y-3 rounded border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Snel invullen</div>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <button
-                        type="button"
-                        className="min-h-10 rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                        onClick={() => applyHoursPreset("supermarket")}
-                      >
-                        Supermarkt
-                      </button>
-                      <button
-                        type="button"
-                        className="min-h-10 rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                        onClick={() => applyHoursPreset("cafe")}
-                      >
-                        Café
-                      </button>
-                      <button
-                        type="button"
-                        className="min-h-10 rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                        onClick={() => applyHoursPreset("club")}
-                      >
-                        Club
-                      </button>
-                    </div>
+                  <div className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Snel instellen</div>
                     <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto_auto] sm:items-end">
                       <label className="block space-y-1">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dagen</span>
                         <select
-                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                           value={quickHoursScope}
                           onChange={(event) => setQuickHoursScope(event.target.value as typeof quickHoursScope)}
                         >
@@ -1382,7 +1660,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                       <label className="block space-y-1">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Van</span>
                         <select
-                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                           value={quickHoursOpen}
                           onChange={(event) => setQuickHoursOpen(event.target.value)}
                         >
@@ -1394,7 +1672,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                       <label className="block space-y-1">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tot</span>
                         <select
-                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                           value={quickHoursClose}
                           onChange={(event) => setQuickHoursClose(event.target.value)}
                         >
@@ -1405,14 +1683,14 @@ export default function MapClient({ places }: { places: Place[] }) {
                       </label>
                       <button
                         type="button"
-                        className="min-h-11 rounded bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                        className="min-h-11 rounded-full bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
                         onClick={applyQuickHours}
                       >
                         Toepassen
                       </button>
                       <button
                         type="button"
-                        className="min-h-11 rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                        className="min-h-11 rounded-full bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                         onClick={closeQuickHours}
                       >
                         Gesloten
@@ -1420,23 +1698,24 @@ export default function MapClient({ places }: { places: Place[] }) {
                     </div>
                     <button
                       type="button"
-                      className="min-h-10 w-full rounded bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 sm:w-auto"
-                      onClick={() => applyHoursPreset("closed")}
+                      className="min-h-10 w-full rounded-full bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 sm:w-auto"
+                      onClick={() => setAdminForm((form) => ({ ...form, dayHours: createEmptyHours() }))}
                     >
                       Alles leegmaken
                     </button>
                   </div>
                   <div className="grid gap-3">
-                    {shortDayLabels.map((day, index) => {
+                    {displayDayOrder.map((index) => {
                       const dayHours = getAdminDayHoursValue(adminForm.dayHours[index]);
+                      const day = dayLabels[index];
 
                       return (
-                        <div key={day} className="grid gap-2 rounded border border-slate-200 p-3 sm:grid-cols-[4rem_1fr_1fr_1fr] sm:items-end">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 sm:pb-2">{day}</div>
+                        <div key={day} className="grid gap-2 rounded-3xl border border-slate-200 p-4 sm:grid-cols-[7rem_1fr_1fr_1fr] sm:items-end">
+                          <div className="text-sm font-medium capitalize text-slate-700 sm:pb-2">{day}</div>
                           <label className="block space-y-1">
                             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</span>
                             <select
-                              className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                               value={dayHours.isOpen ? "open" : "closed"}
                               onChange={(event) => updateAdminDayOpenStatus(index, event.target.value === "open")}
                             >
@@ -1447,7 +1726,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                           <label className="block space-y-1">
                             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Van</span>
                             <select
-                              className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm disabled:bg-slate-100 disabled:text-slate-400"
+                              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900 disabled:bg-slate-100 disabled:text-slate-400"
                               value={dayHours.open}
                               disabled={!dayHours.isOpen}
                               onChange={(event) => updateAdminDayTime(index, "open", event.target.value)}
@@ -1460,7 +1739,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                           <label className="block space-y-1">
                             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tot</span>
                             <select
-                              className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm disabled:bg-slate-100 disabled:text-slate-400"
+                              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900 disabled:bg-slate-100 disabled:text-slate-400"
                               value={dayHours.close}
                               disabled={!dayHours.isOpen}
                               onChange={(event) => updateAdminDayTime(index, "close", event.target.value)}
@@ -1477,7 +1756,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                 </div>
 
                 {adminForm.name.trim() && (
-                  <div className="space-y-3 rounded border border-slate-200 p-3">
+                  <div className="space-y-3 rounded-3xl border border-slate-200 p-4">
                     <div>
                       <div className="text-sm font-medium text-slate-700">Voorraadmeldingen</div>
                       <div className="text-xs text-slate-500">Pas deze tellers aan als er per ongeluk verkeerd gemeld is.</div>
@@ -1489,7 +1768,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                           type="number"
                           min="0"
                           step="1"
-                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                           value={getMateReport(adminForm.name)?.presentCount ?? 0}
                           onChange={(event) => {
                             const currentReport = getMateReport(adminForm.name);
@@ -1507,7 +1786,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                           type="number"
                           min="0"
                           step="1"
-                          className="w-full rounded border border-slate-300 px-3 py-3 text-base text-slate-900 sm:py-2 sm:text-sm"
+                          className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
                           value={getMateReport(adminForm.name)?.absentCount ?? 0}
                           onChange={(event) => {
                             const currentReport = getMateReport(adminForm.name);
@@ -1531,18 +1810,25 @@ export default function MapClient({ places }: { places: Place[] }) {
 
                 <button
                   type="submit"
-                  className="min-h-11 w-full rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 sm:w-auto"
+                  className="min-h-11 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 sm:w-auto"
                 >
                   Locatie opslaan
                 </button>
               </form>
-            </div>
-          )}
+	            </div>
+	          )}
+	        </div>
         </div>
-      )}
+	      )}
 
       {viewMode === "map" ? (
         <MapContainer center={[51.2194, 4.4025]} zoom={13} className="w-full h-full" zoomControl={false}>
+        <MapViewportController focusTarget={focusTarget} />
+        <MapInteractionController
+          onMapClick={() => {
+            setSelectedPlaceName(null);
+          }}
+        />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
@@ -1561,17 +1847,15 @@ export default function MapClient({ places }: { places: Place[] }) {
         ))}
 
         {userLocation && (
-          <Marker position={userLocation} icon={userIcon}>
-            <Popup>📍 Jouw locatie</Popup>
-          </Marker>
+          <Marker position={userLocation} icon={userIcon} />
         )}
 
       </MapContainer>
       ) : (
-        <div className="absolute inset-0 overflow-auto bg-slate-50 p-3 pt-36 sm:p-4 sm:pt-24">
+        <div className="absolute inset-0 overflow-auto bg-slate-50 p-3 pb-28 pt-36 sm:p-4 sm:pb-28 sm:pt-24">
           <div className="max-w-4xl mx-auto space-y-4">
             {listPlaces.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-600">
+              <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 text-center text-slate-600">
                 Geen locaties gevonden voor deze filters.
               </div>
             ) : (
@@ -1582,7 +1866,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                 <button
                   key={place.name}
                   type="button"
-                  className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-900 sm:p-5"
+                  className="w-full rounded-[1.75rem] border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-900 sm:p-5"
                   onClick={() => setSelectedPlaceName(place.name)}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -1606,23 +1890,142 @@ export default function MapClient({ places }: { places: Place[] }) {
         </div>
       )}
 
+      {showFloatingUi && (
+        <button
+          type="button"
+          className="absolute bottom-4 left-1/2 z-[1000] min-h-12 -translate-x-1/2 rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg transition hover:bg-slate-700"
+          onClick={openSpotForm}
+        >
+          Club Mate gespot!
+        </button>
+      )}
+
+      {spotFormOpen && (
+        <div className="fixed inset-0 z-[1150] bg-slate-950/40 p-3 backdrop-blur-sm sm:p-6" onClick={closeSpotForm}>
+          <div
+            className="mx-auto flex h-full w-full max-w-xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nieuwe spot</div>
+                <div className="text-xl font-semibold text-slate-950">Waar heb je Club Mate gezien?</div>
+              </div>
+              <button
+                type="button"
+                className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200"
+                onClick={closeSpotForm}
+                aria-label="Sluit formulier"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-4 sm:p-6">
+              <div className="space-y-4">
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-slate-700">Naam van café of winkel</span>
+                  <input
+                    type="text"
+                    className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
+                    value={spotForm.name}
+                    onChange={(event) => {
+                      setSpotForm((currentForm) => ({
+                        ...currentForm,
+                        name: event.target.value,
+                      }));
+                      setSpotSuggestionSelected(false);
+                      setSpotSuggestions([]);
+                      setSpotSuggestionMessage(null);
+                      setSpotFormMessage(null);
+                    }}
+                  />
+                </label>
+
+                {shouldShowSpotSuggestions && (isLoadingSpotSuggestions || spotSuggestions.length > 0 || spotSuggestionMessage) && (
+                  <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+                    {isLoadingSpotSuggestions && (
+                      <div className="px-4 py-3 text-sm text-slate-500">Suggesties zoeken...</div>
+                    )}
+                    {!isLoadingSpotSuggestions && spotSuggestionMessage && spotSuggestions.length === 0 && (
+                      <div className="px-4 py-3 text-sm text-slate-500">{spotSuggestionMessage}</div>
+                    )}
+                    {spotSuggestions.map((suggestion) => (
+                      <button
+                        key={`${suggestion.placeId ?? suggestion.label}-${suggestion.latitude}-${suggestion.longitude}`}
+                        type="button"
+                        className="block w-full border-t border-slate-100 px-4 py-3 text-left text-sm text-slate-700 transition first:border-t-0 hover:bg-slate-50"
+                        onClick={() => selectSpotSuggestion(suggestion)}
+                      >
+                        <span className="block font-medium">{suggestion.name}</span>
+                        <span className="block text-xs text-slate-500">{suggestion.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {spotForm.address && (
+                  <div className="rounded-3xl bg-slate-50 p-4 text-sm text-slate-700">
+                    <div className="font-medium text-slate-900">{spotForm.name}</div>
+                    <div className="mt-1">{spotForm.address}</div>
+                  </div>
+                )}
+
+                <label className="block space-y-1">
+                  <span className="text-sm font-medium text-slate-700">Extra info</span>
+                  <textarea
+                    className="min-h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
+                    placeholder="Bijvoorbeeld: in de frigo rechts van de toog"
+                    value={spotForm.info}
+                    onChange={(event) => {
+                      setSpotForm((currentForm) => ({ ...currentForm, info: event.target.value }));
+                    }}
+                  />
+                </label>
+
+                {spotFormMessage && (
+                  <div className={`text-sm ${spotFormMessage.includes("gekozen") ? "text-emerald-700" : "text-rose-600"}`}>
+                    {spotFormMessage}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="min-h-11 w-full rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60"
+                  onClick={submitSpotForm}
+                  disabled={isSubmittingSpot}
+                >
+                  {isSubmittingSpot ? "Bezig..." : "Bevestigen"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedPlace && (
-        <div className="absolute bottom-3 left-3 right-3 z-[1000] mx-auto max-h-[70dvh] max-w-md overflow-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl sm:bottom-4 sm:left-4 sm:right-4 sm:p-5 md:left-auto md:right-4">
-          <PlaceDetails
-            key={selectedPlace.name}
-            place={selectedPlace}
-            status={placeStatuses.get(selectedPlace.name) ?? getOpenStatus(selectedPlace, now)}
-            distance={selectedPlaceDistance}
-            mateReport={getMateReport(selectedPlace.name)}
-            onMateReport={(placeName, status) => setPendingMateReport({ placeName, status })}
-            onClose={() => setSelectedPlaceName(null)}
-          />
+        <div className="fixed inset-0 z-[1100] flex items-end justify-center p-3 sm:items-end sm:justify-end sm:p-4" onClick={() => setSelectedPlaceName(null)}>
+          <div
+            className="w-full max-w-md overflow-auto rounded-[2rem] border border-slate-200 bg-white p-4 shadow-2xl sm:max-h-[78dvh] sm:p-5"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <PlaceDetails
+              key={selectedPlace.name}
+              place={selectedPlace}
+              status={placeStatuses.get(selectedPlace.name) ?? getOpenStatus(selectedPlace, now)}
+              distance={selectedPlaceDistance}
+              mateReport={getMateReport(selectedPlace.name)}
+              onMateReport={(placeName, status) => setPendingMateReport({ placeName, status })}
+              onClose={() => setSelectedPlaceName(null)}
+              todayIndex={todayIndex}
+            />
+          </div>
         </div>
       )}
 
       {pendingMateReport && (
         <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl">
+          <div className="w-full max-w-sm rounded-[2rem] bg-white p-5 shadow-2xl">
             <div className="text-lg font-semibold text-slate-950">Melding bevestigen</div>
             <div className="mt-2 text-sm text-slate-600">
               Wil je melden dat bij {pendingMateReport.placeName} {reportStatusLabel(pendingMateReport.status).toLowerCase()} is?
@@ -1630,14 +2033,14 @@ export default function MapClient({ places }: { places: Place[] }) {
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                className="min-h-11 rounded bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+                className="min-h-11 rounded-full bg-slate-100 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
                 onClick={() => setPendingMateReport(null)}
               >
                 Annuleer
               </button>
               <button
                 type="button"
-                className="min-h-11 rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                className="min-h-11 rounded-full bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700"
                 onClick={confirmPendingMateReport}
               >
                 Bevestigen
