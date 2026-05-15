@@ -1927,9 +1927,11 @@ export default function MapClient({ places }: { places: Place[] }) {
       {showFloatingUi && (
         <button
           type="button"
-          className="absolute bottom-4 left-1/2 z-[1000] min-h-12 -translate-x-1/2 rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-lg transition hover:bg-slate-700"
+          className="absolute bottom-4 left-1/2 z-[1000] min-h-12 w-[325px] -translate-x-1/2 items-center justify-center rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] px-2 text-[22px] text-[rgba(236,0,0,1)] shadow-lg transition hover:bg-[rgba(235,150,49,1)]"
+          style={{ fontFamily: "Notable, sans-serif" }}
           onClick={openSpotForm}
         >
+          <span className="relative top-[-10px]"></span>
           Club Mate gespot!
         </button>
       )}
