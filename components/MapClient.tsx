@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Bricolage_Grotesque } from "next/font/google";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -26,18 +27,23 @@ type PlaceSuggestion = {
   longitude?: number;
 };
 
+const bricolageGrotesque = Bricolage_Grotesque({
+  subsets: ["latin"],
+  display: "swap",
+});
+
 const icon = new L.Icon({
   iconUrl: "/custom-pin.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [40, 40],
-  iconAnchor: [20, 40],
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
 });
 
 const userIcon = new L.Icon({
   iconUrl: "/mijn-pin.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
+  iconSize: [24, 24],
+  iconAnchor: [12, 24],
   className: "user-marker",
 });
 
@@ -50,19 +56,24 @@ const cartoLabelsAttribution =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
 
 const filterOptions = [
-  { value: "all", label: "Alles", widthClass: "w-[100px] sm:w-[104px]" },
-  { value: "cafe", label: "Cafés", widthClass: "w-[114px] sm:w-[120px]" },
-  { value: "shop", label: "Supermarkten", widthClass: "w-[170px] sm:w-[182px]" },
+  { value: "all", label: "Alles", widthClass: "min-w-[72px]" },
+  { value: "cafe", label: "Cafés", widthClass: "min-w-[76px]" },
+  { value: "shop", label: "Supermarkten", widthClass: "min-w-[118px]" },
 ];
 
 const accentButtonClass =
-  "rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[#193882] shadow-sm transition hover:bg-[#dbb323]";
+  "rounded-xl border border-[#d8271d] bg-[#f7c200] text-[#193882] shadow-[0_8px_24px_rgba(25,56,130,0.1)] transition hover:bg-[#dbb323]";
 const accentButtonActiveClass =
-  "rounded-full border-3 border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[#193882] shadow-sm transition";
+  "rounded-xl border border-[#d8271d] bg-[#dbb323] text-[#193882] shadow-[0_10px_24px_rgba(25,56,130,0.14)] transition";
 const accentIconButtonClass =
-  "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[#193882] transition hover:bg-[#dbb323]";
+  "grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#d8271d] bg-[#f7c200] text-[#193882] shadow-[0_8px_24px_rgba(25,56,130,0.1)] transition hover:bg-[#dbb323]";
 const notableHomeButtonClass =
-  "font-notable whitespace-nowrap text-center text-[13px] leading-[1.1] tracking-[0.05em] sm:text-[14px]";
+  `${bricolageGrotesque.className} font-bricolage whitespace-nowrap text-center text-[13px] font-extrabold leading-[1.05] tracking-[0.015em] sm:text-[13px]`;
+const bricolageButtonStyle = {
+  fontFamily: '"Bricolage Grotesque", sans-serif',
+  fontWeight: 760,
+  fontOpticalSizing: "auto" as const,
+};
 
 const defaultPlaceDetails: Record<string, Pick<Place, "address" | "hours">> = {
   korsakov: {
@@ -643,24 +654,29 @@ function MiniMapPreview({
 }: {
   position: [number, number];
 }) {
-  const [latitude, longitude] = position;
-  const offset = 0.0045;
-  const bbox = [
-    longitude - offset,
-    latitude - offset,
-    longitude + offset,
-    latitude + offset,
-  ].join(",");
-  const previewUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=cartodbpositron&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
-
   return (
     <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-slate-100 shadow-sm">
-      <iframe
-        title="Locatievoorbeeld op kaart"
-        src={previewUrl}
-        className="block h-44 w-full bg-slate-100"
-        loading="lazy"
-      />
+      <MapContainer
+        center={position}
+        zoom={16}
+        className="mini-map-surface h-44 w-full"
+        zoomControl={false}
+        attributionControl={false}
+        dragging={false}
+        doubleClickZoom={false}
+        scrollWheelZoom={false}
+        touchZoom={false}
+      >
+        <TileLayer attribution={mapTilerAttribution} url={mapTilerAquarelleUrl} keepBuffer={1} />
+        <TileLayer
+          attribution={cartoLabelsAttribution}
+          url={cartoLabelsOnlyUrl}
+          opacity={0.82}
+          updateWhenZooming={false}
+          keepBuffer={1}
+        />
+        <Marker position={position} icon={icon} />
+      </MapContainer>
     </div>
   );
 }
@@ -1451,63 +1467,66 @@ export default function MapClient({ places }: { places: Place[] }) {
   return (
     <div className="relative h-dvh w-screen overflow-hidden bg-slate-100">
       {showFloatingUi && (
-        <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-wrap justify-center gap-2 rounded-[1.75rem] border border-[#c91e15] bg-[#ecd2aa] p-2.5 shadow-lg backdrop-blur sm:left-4 sm:right-auto sm:top-4 sm:justify-start sm:p-3">
-        <button
-          type="button"
-          className={`${notableHomeButtonClass} ${viewMode === "map" ? accentButtonActiveClass : accentButtonClass} min-h-[42px] w-[104px] px-3 py-2 sm:min-h-[40px] sm:w-[110px] sm:py-2`}
-          onClick={() => selectViewMode("map")}
-        >
-          Kaart
-        </button>
-        <button
-          type="button"
-          className={`${notableHomeButtonClass} ${viewMode === "list" ? accentButtonActiveClass : accentButtonClass} min-h-[42px] w-[104px] px-3 py-2 sm:min-h-[40px] sm:w-[110px] sm:py-2`}
-          onClick={() => selectViewMode("list")}
-        >
-          Lijst
-        </button>
-        <button
-          type="button"
-          className={`${adminPanelOpen ? accentButtonActiveClass : accentButtonClass} flex min-h-[42px] w-[52px] items-center justify-center px-0 py-2 text-[22px] leading-none sm:min-h-[40px] sm:w-[52px] sm:py-2`}
-          onClick={() => {
-            setSelectedPlaceName(null);
-            setSpotFormOpen(false);
-            setAdminPanelOpen((isOpen) => !isOpen);
-          }}
-          aria-label="Beheer"
-          title="Beheer"
-        >
-          ⚙
-        </button>
-        </div>
-      )}
-
-      {showFloatingUi && (
-        <div className="absolute left-3 right-3 top-[5.25rem] z-[1000] flex flex-col gap-2 rounded-[1.75rem] border border-[#c91e15] bg-[#ecd2aa] p-2.5 shadow-lg backdrop-blur sm:left-auto sm:right-4 sm:top-4 sm:w-auto sm:min-w-[15rem] sm:p-3">
-        <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
-          {filterOptions.map((option) => (
+        <div className="absolute left-3 right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[1000] rounded-2xl border border-[#d8271d] bg-[#ecd2aa] p-2 shadow-[0_18px_45px_rgba(15,23,42,0.14)] backdrop-blur-md sm:left-4 sm:right-auto sm:top-4 sm:min-w-[18rem] sm:p-3">
+          <div className="flex items-center gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-3 gap-2">
+              <button
+                type="button"
+                className={`${notableHomeButtonClass} ${viewMode === "map" ? accentButtonActiveClass : accentButtonClass} min-h-[36px] px-3 py-2`}
+                style={bricolageButtonStyle}
+                onClick={() => selectViewMode("map")}
+              >
+                Kaart
+              </button>
+              <button
+                type="button"
+                className={`${notableHomeButtonClass} ${viewMode === "list" ? accentButtonActiveClass : accentButtonClass} min-h-[36px] px-3 py-2`}
+                style={bricolageButtonStyle}
+                onClick={() => selectViewMode("list")}
+              >
+                Lijst
+              </button>
+              <button
+                type="button"
+                className={`${adminPanelOpen ? accentButtonActiveClass : accentButtonClass} flex min-h-[36px] items-center justify-center px-0 text-[18px] leading-none`}
+                onClick={() => {
+                  setSelectedPlaceName(null);
+                  setSpotFormOpen(false);
+                  setAdminPanelOpen((isOpen) => !isOpen);
+                }}
+                aria-label="Beheer"
+                title="Beheer"
+              >
+                ⚙
+              </button>
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {filterOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`${notableHomeButtonClass} ${option.widthClass} ${filter === option.value ? accentButtonActiveClass : accentButtonClass} min-h-[34px] px-3 py-1.5`}
+                style={bricolageButtonStyle}
+                onClick={() => selectFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
             <button
-              key={option.value}
               type="button"
-              className={`${notableHomeButtonClass} ${option.widthClass} ${filter === option.value ? accentButtonActiveClass : accentButtonClass} min-h-[44px] px-3 py-2 sm:min-h-[40px] sm:px-3 sm:py-2`}
-              onClick={() => selectFilter(option.value)}
+              className={`${notableHomeButtonClass} ${openNowOnly ? `${accentButtonActiveClass} border-emerald-500` : accentButtonClass} flex min-h-[34px] min-w-[94px] items-center justify-center gap-2 px-3 py-1.5`}
+              style={bricolageButtonStyle}
+              onClick={toggleOpenNowOnly}
+              aria-pressed={openNowOnly}
             >
-              {option.label}
+              <span
+                className={`h-2 w-2 rounded-full ${openNowOnly ? "bg-emerald-500" : "bg-[rgba(216,39,29,0.65)]"}`}
+                aria-hidden="true"
+              />
+              Nu open
             </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          className={`${notableHomeButtonClass} ${openNowOnly ? `${accentButtonActiveClass} border-emerald-500` : accentButtonClass} flex min-h-[44px] w-[152px] items-center justify-center gap-2 self-center px-3 py-2 sm:min-h-[40px] sm:w-[160px] sm:self-start sm:py-2`}
-          onClick={toggleOpenNowOnly}
-          aria-pressed={openNowOnly}
-        >
-          <span
-            className={`h-2 w-2 rounded-full ${openNowOnly ? "bg-emerald-500" : "bg-[rgba(236,0,0,0.55)]"}`}
-            aria-hidden="true"
-          />
-          Nu open
-        </button>
+          </div>
         </div>
       )}
 
@@ -1893,10 +1912,10 @@ export default function MapClient({ places }: { places: Place[] }) {
 
       </MapContainer>
       ) : (
-        <div className="absolute inset-0 overflow-auto bg-slate-50 p-3 pb-28 pt-36 sm:p-4 sm:pb-28 sm:pt-24">
+        <div className="absolute inset-0 overflow-auto bg-slate-50 p-3 pb-24 pt-28 sm:p-4 sm:pb-28 sm:pt-24">
           <div className="max-w-4xl mx-auto space-y-4">
             {listPlaces.length === 0 ? (
-              <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 text-center text-slate-600">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center text-slate-600 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
                 Geen locaties gevonden voor deze filters.
               </div>
             ) : (
@@ -1907,7 +1926,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                 <button
                   key={place.name}
                   type="button"
-                  className="w-full rounded-[1.75rem] border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-900 sm:p-5"
+                  className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition hover:border-slate-300 hover:shadow-[0_14px_34px_rgba(15,23,42,0.1)] focus:outline-none focus:ring-2 focus:ring-slate-900 sm:p-5"
                   onClick={() => setSelectedPlaceName(place.name)}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -1934,10 +1953,19 @@ export default function MapClient({ places }: { places: Place[] }) {
       {showFloatingUi && (
         <button
           type="button"
-          className="font-notable absolute bottom-4 left-1/2 z-[1000] flex h-[52px] w-[min(92vw,360px)] -translate-x-1/2 items-center justify-center rounded-full border border-[#d8271d] bg-[rgba(247,194,0,1)] px-[18px] text-center text-[20px] leading-[20px] tracking-[0.06em] text-[#193882] shadow-lg transition hover:bg-[rgba(235,150,49,1)] sm:h-[48px] sm:w-[220px] sm:text-[22px] sm:leading-[22px]"
+          className={`${bricolageGrotesque.className} absolute bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-1/2 z-[1000] flex h-11 w-[min(72vw,240px)] -translate-x-1/2 items-center justify-center rounded-xl border border-[#d8271d] bg-[#f7c200] px-4 text-center text-sm font-semibold tracking-[0.01em] text-[#193882] shadow-[0_18px_45px_rgba(25,56,130,0.18)] backdrop-blur-md transition hover:bg-[#dbb323] sm:bottom-4 sm:h-10 sm:w-[210px]`}
+          style={bricolageButtonStyle}
           onClick={openSpotForm}
         >
-          <span className="relative top-[-2px]">Club Mate gespot!</span>
+          <span className="flex items-center gap-2">
+            <img
+              src="/club-mate-logo.png"
+              alt=""
+              aria-hidden="true"
+              className="h-5 w-auto object-contain sm:h-4"
+            />
+            <span>Gespot!</span>
+          </span>
         </button>
       )}
 

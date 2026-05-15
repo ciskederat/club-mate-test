@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Notable } from "next/font/google";
+import { Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 
-const notable = Notable({
-  weight: "400",
+const bricolageGrotesque = Bricolage_Grotesque({
   subsets: ["latin"],
-  variable: "--font-notable",
+  display: "swap",
+  variable: "--font-bricolage-grotesque",
 });
 
 export const metadata: Metadata = {
@@ -19,7 +19,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${notable.variable} h-full antialiased`}>
+    <html lang="en" className={`${bricolageGrotesque.variable} h-full antialiased`}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

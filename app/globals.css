@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Notable&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -22,11 +23,84 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-.font-notable {
-  font-family: var(--font-notable), sans-serif;
+.font-bricolage {
+  font-family: "Bricolage Grotesque", var(--font-bricolage-grotesque), var(--font-geist-sans), Arial, Helvetica, sans-serif !important;
   font-style: normal;
-  font-weight: 400;
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 32, "wght" 760;
+}
+
+.map-surface .leaflet-container {
+  background: #eef2f7;
+}
+
+.map-surface .leaflet-control-zoom {
+  border: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+}
+
+.map-surface .leaflet-control-zoom a {
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a;
+}
+
+.map-surface .leaflet-control-zoom a:last-child {
+  border-bottom: 0;
+}
+
+.map-surface .leaflet-bottom.leaflet-right {
+  margin: 0 12px calc(env(safe-area-inset-bottom) + 68px) 0;
+}
+
+.map-surface .leaflet-bottom.leaflet-left {
+  margin: 0 0 calc(env(safe-area-inset-bottom) + 10px) 8px;
+}
+
+.map-surface .leaflet-control-attribution {
+  max-width: min(56vw, 220px);
+  padding: 2px 6px;
+  border-radius: 10px 10px 0 0;
+  background: rgba(255, 255, 255, 0.88);
+  font-size: 8px !important;
+  line-height: 1.1 !important;
+  color: #475569;
+}
+
+.map-surface .leaflet-control-attribution,
+.map-surface .leaflet-control-attribution * {
+  font-size: 8px !important;
+  line-height: 1.1 !important;
+}
+
+.map-surface .leaflet-control-attribution a {
+  color: inherit;
+}
+
+@media (min-width: 640px) {
+  .map-surface .leaflet-bottom.leaflet-left {
+    margin: 0 0 0 8px;
+  }
+
+  .map-surface .leaflet-bottom.leaflet-right {
+    margin: 0 16px 16px 0;
+  }
+
+  .map-surface .leaflet-control-attribution {
+    max-width: none;
+    font-size: 9px !important;
+  }
+
+  .map-surface .leaflet-control-attribution,
+  .map-surface .leaflet-control-attribution * {
+    font-size: 9px !important;
+  }
 }
