@@ -634,14 +634,14 @@ function MiniMapPreview({
     longitude + offset,
     latitude + offset,
   ].join(",");
-  const marker = `${latitude},${longitude}`;
+  const previewUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=cartodbpositron&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
+    <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-slate-100 shadow-sm">
       <iframe
         title="Locatievoorbeeld op kaart"
-        src={`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(marker)}`}
-        className="block h-44 w-full"
+        src={previewUrl}
+        className="block h-44 w-full bg-slate-100"
         loading="lazy"
       />
     </div>
