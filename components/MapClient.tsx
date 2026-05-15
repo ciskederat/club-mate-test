@@ -34,10 +34,10 @@ const icon = new L.Icon({
 });
 
 const userIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "/mijn-pin.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
   className: "user-marker",
 });
 
