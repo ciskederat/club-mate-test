@@ -5,7 +5,7 @@ export default async function Home() {
   const places = await getPlaces();
 
   return (
-    <main className="h-dvh w-screen">
+    <main className="h-svh w-screen">
       <Map places={places} />
     </main>
   );

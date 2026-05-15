@@ -144,6 +144,16 @@ export const savePlace = async ({ id, previousName, place }: SavePlaceInput) => 
   return mapRowToPlace(rows[0]);
 };
 
+export const deletePlace = async (place: Place) => {
+  const selector = place.id
+    ? `id=eq.${encodeURIComponent(place.id)}`
+    : `name=eq.${encodeURIComponent(place.name)}`;
+
+  await requestSupabase(`?${selector}`, {
+    method: "DELETE",
+  });
+};
+
 export const reportMateStatus = async (place: Place, status: MateReportStatus) => {
   const now = new Date().toISOString();
   const presentCount = Math.max(0, Number(place.presentCount ?? 0)) + (status === "present" ? 1 : 0);

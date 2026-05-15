@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
+import Image from "next/image";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -37,6 +38,7 @@ const icon = new L.Icon({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [32, 32],
   iconAnchor: [16, 32],
+  className: "place-marker",
 });
 
 const userIcon = new L.Icon({
@@ -56,21 +58,23 @@ const cartoLabelsAttribution =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
 
 const filterOptions = [
-  { value: "all", label: "Alles", widthClass: "min-w-[60px]" },
-  { value: "cafe", label: "Cafés", widthClass: "min-w-[64px]" },
-  { value: "shop", label: "Supermarkten", widthClass: "min-w-[108px]" },
+  { value: "all", label: "Alles" },
+  { value: "cafe", label: "Cafés" },
+  { value: "shop", label: "Winkels" },
 ];
 
 const accentButtonClass =
   "rounded-xl border border-[#9f4a3d]/55 bg-[#e5bd48] text-[#26304a] shadow-[0_6px_18px_rgba(52,38,31,0.11)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#8d3f35]/70 hover:bg-[#d8ac38] hover:shadow-[0_10px_24px_rgba(52,38,31,0.16)] active:translate-y-0";
-const accentButtonActiveClass =
-  "rounded-xl border border-[#8d3f35]/70 bg-[#d5a83b] text-[#202941] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_8px_20px_rgba(52,38,31,0.14)] transition duration-200 ease-out";
 const accentIconButtonClass =
   "grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-[#9f4a3d]/55 bg-[#e5bd48] text-[#26304a] shadow-[0_6px_18px_rgba(52,38,31,0.11)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#8d3f35]/70 hover:bg-[#d8ac38] hover:shadow-[0_10px_24px_rgba(52,38,31,0.16)] active:translate-y-0";
 const secondaryButtonClass =
   "rounded-xl border border-[#9f4a3d]/28 bg-[#fff8e8]/72 text-[#46362d] shadow-[0_6px_18px_rgba(52,38,31,0.07)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#9f4a3d]/45 hover:bg-white/86 hover:shadow-[0_10px_24px_rgba(52,38,31,0.12)] active:translate-y-0";
 const notableHomeButtonClass =
-  `${bricolageGrotesque.className} font-bricolage whitespace-nowrap text-center text-[12px] font-bold leading-none tracking-[0.01em] sm:text-[12px]`;
+  `${bricolageGrotesque.className} font-bricolage flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-[14px] border px-3 text-center text-[11px] font-bold leading-none tracking-[0.01em] transition duration-200 ease-out sm:h-9 sm:px-3.5 sm:text-[12px]`;
+const toolbarButtonClass =
+  "border-[#9f4a3d]/24 bg-[#fff8e8]/58 text-[#4a3a31] shadow-[inset_0_1px_0_rgba(255,255,255,0.58),0_4px_12px_rgba(52,38,31,0.06)] hover:border-[#9f4a3d]/38 hover:bg-[#fffaf0]/78 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_7px_16px_rgba(52,38,31,0.09)]";
+const toolbarActiveButtonClass =
+  "border-[#8d3f35]/52 bg-[#d7ad43]/88 text-[#252d43] shadow-[inset_0_1px_0_rgba(255,255,255,0.34),inset_0_-2px_0_rgba(112,73,35,0.12),0_6px_16px_rgba(52,38,31,0.11)] hover:border-[#8d3f35]/62 hover:bg-[#d3a63d]";
 const bricolageButtonStyle = {
   fontFamily: '"Bricolage Grotesque", sans-serif',
   fontWeight: 680,
@@ -1222,6 +1226,16 @@ export default function MapClient({ places }: { places: Place[] }) {
     });
   };
 
+  const removePlaceFromState = (placeToRemove: Place) => {
+    setDatabasePlaces((currentPlaces) =>
+      currentPlaces.filter((place) =>
+        placeToRemove.id
+          ? place.id !== placeToRemove.id
+          : normalizeType(place.name) !== normalizeType(placeToRemove.name),
+      ),
+    );
+  };
+
   const saveAdminPlace = async () => {
     const latitude = Number(adminForm.latitude);
     const longitude = Number(adminForm.longitude);
@@ -1289,6 +1303,56 @@ export default function MapClient({ places }: { places: Place[] }) {
       setAdminPanelOpen(false);
     } catch {
       setAdminError("Locatie opslaan is mislukt.");
+    }
+  };
+
+  const deleteAdminPlace = async () => {
+    const editingPlace = safePlaces.find((place) => normalizeType(place.name) === normalizeType(editingPlaceName));
+
+    if (!editingPlace) {
+      setAdminError("Kies eerst een locatie om te verwijderen.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Wil je "${editingPlace.name}" definitief verwijderen?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/places", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-pin": adminPasscode,
+        },
+        body: JSON.stringify({ place: editingPlace }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (response.status === 401) {
+        lockAdmin();
+        return;
+      }
+
+      if (!response.ok) {
+        setAdminError(data?.error ?? "Locatie verwijderen is mislukt.");
+        return;
+      }
+
+      removePlaceFromState(editingPlace);
+      setSelectedPlaceName((placeName) =>
+        normalizeType(placeName) === normalizeType(editingPlace.name) ? null : placeName,
+      );
+      setEditingPlaceName(null);
+      setAdminForm(createEmptyAdminForm());
+      setAddressSuggestionSelected(false);
+      setAddressSuggestions([]);
+      setAddressSuggestionMessage(null);
+      setAdminError("Locatie verwijderd.");
+    } catch {
+      setAdminError("Locatie verwijderen is mislukt.");
     }
   };
 
@@ -1467,63 +1531,64 @@ export default function MapClient({ places }: { places: Place[] }) {
   const showFloatingUi = !adminPanelOpen && !spotFormOpen;
 
   return (
-    <div className="relative h-dvh w-screen overflow-hidden bg-slate-100">
+    <div className="relative h-svh w-screen overflow-hidden bg-slate-100">
       {showFloatingUi && (
-        <div className="retro-surface absolute left-3 right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[1000] rounded-2xl border border-[#9f4a3d]/42 bg-[#efe0c6]/82 p-1.5 shadow-[0_14px_36px_rgba(52,38,31,0.14)] backdrop-blur-md sm:left-4 sm:right-auto sm:top-4 sm:min-w-[17rem] sm:p-2">
-          <div className="flex items-center gap-1.5">
-            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5">
-              <button
-                type="button"
-                className={`${notableHomeButtonClass} ${viewMode === "map" ? accentButtonActiveClass : accentButtonClass} min-h-[30px] px-2.5 py-1.5`}
-                style={bricolageButtonStyle}
-                onClick={() => selectViewMode("map")}
-              >
-                Kaart
-              </button>
-              <button
-                type="button"
-                className={`${notableHomeButtonClass} ${viewMode === "list" ? accentButtonActiveClass : accentButtonClass} min-h-[30px] px-2.5 py-1.5`}
-                style={bricolageButtonStyle}
-                onClick={() => selectViewMode("list")}
-              >
-                Lijst
-              </button>
-              <button
-                type="button"
-                className={`${adminPanelOpen ? accentButtonActiveClass : accentButtonClass} flex min-h-[30px] items-center justify-center px-0 text-[16px] leading-none`}
-                onClick={() => {
-                  setSelectedPlaceName(null);
-                  setSpotFormOpen(false);
-                  setAdminPanelOpen((isOpen) => !isOpen);
-                }}
-                aria-label="Beheer"
-                title="Beheer"
-              >
-                ⚙
-              </button>
-            </div>
-          </div>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {filterOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`${notableHomeButtonClass} ${option.widthClass} ${filter === option.value ? accentButtonActiveClass : accentButtonClass} min-h-[30px] px-2.5 py-1.5`}
-                style={bricolageButtonStyle}
-                onClick={() => selectFilter(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
+        <div className="absolute left-2 top-[max(0.5rem,env(safe-area-inset-top))] z-[1000] flex max-w-[calc(100vw-1rem)] flex-col items-start gap-1.5 sm:left-4 sm:top-4 sm:flex-row sm:items-center sm:gap-0">
+          <div className="flex items-center gap-1.5 rounded-[18px] border border-[#9f4a3d]/28 bg-[#efe0c6]/74 p-1.5 shadow-[0_12px_28px_rgba(52,38,31,0.12)] backdrop-blur-md sm:rounded-r-none sm:border-r-0 sm:p-2">
             <button
               type="button"
-              className={`${notableHomeButtonClass} ${openNowOnly ? `${accentButtonActiveClass} border-emerald-500/70 bg-emerald-50 text-emerald-950` : accentButtonClass} flex min-h-[30px] min-w-[84px] items-center justify-center gap-1.5 px-2.5 py-1.5`}
+              className={`${notableHomeButtonClass} ${viewMode === "map" ? toolbarActiveButtonClass : toolbarButtonClass} min-w-[50px] sm:min-w-12`}
+              style={bricolageButtonStyle}
+              onClick={() => selectViewMode("map")}
+            >
+              Kaart
+            </button>
+            <button
+              type="button"
+              className={`${notableHomeButtonClass} ${viewMode === "list" ? toolbarActiveButtonClass : toolbarButtonClass} min-w-[50px] sm:min-w-12`}
+              style={bricolageButtonStyle}
+              onClick={() => selectViewMode("list")}
+            >
+              Lijst
+            </button>
+            <button
+              type="button"
+              className={`${adminPanelOpen ? toolbarActiveButtonClass : toolbarButtonClass} flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[14px] leading-none transition duration-200 ease-out sm:h-9 sm:w-9`}
+              onClick={() => {
+                setSelectedPlaceName(null);
+                setSpotFormOpen(false);
+                setAdminPanelOpen((isOpen) => !isOpen);
+              }}
+              aria-label="Beheer"
+              title="Beheer"
+            >
+              ⚙
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-[18px] border border-[#9f4a3d]/28 bg-[#efe0c6]/74 p-1.5 shadow-[0_12px_28px_rgba(52,38,31,0.12)] backdrop-blur-md sm:rounded-l-none sm:border-l-0 sm:p-2">
+            <div className="grid grid-cols-3 gap-1.5 sm:flex sm:items-center">
+              {filterOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`${notableHomeButtonClass} ${filter === option.value ? toolbarActiveButtonClass : toolbarButtonClass} min-w-[52px] sm:min-w-14`}
+                  style={bricolageButtonStyle}
+                  onClick={() => selectFilter(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="h-5 w-px shrink-0 bg-[#9f4a3d]/22" aria-hidden="true" />
+            <button
+              type="button"
+              className={`${notableHomeButtonClass} ${openNowOnly ? "border-emerald-500/55 bg-emerald-50/88 text-emerald-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.48),inset_0_-2px_0_rgba(16,185,129,0.08),0_6px_16px_rgba(16,185,129,0.12)] hover:border-emerald-500/70 hover:bg-emerald-100/88" : toolbarButtonClass} min-w-[70px] gap-1.5 sm:min-w-[76px]`}
               style={bricolageButtonStyle}
               onClick={toggleOpenNowOnly}
               aria-pressed={openNowOnly}
             >
               <span
-                className={`h-2 w-2 rounded-full ${openNowOnly ? "bg-emerald-500" : "bg-[rgba(216,39,29,0.65)]"}`}
+                className={`h-1.5 w-1.5 rounded-full shadow-[0_0_0_2px_rgba(255,248,232,0.58)] ${openNowOnly ? "bg-emerald-500" : "bg-[#b85b4f]/70"}`}
                 aria-hidden="true"
               />
               Nu open
@@ -1857,17 +1922,29 @@ export default function MapClient({ places }: { places: Place[] }) {
                 )}
 
                 {adminError && (
-                  <div className={`text-sm ${adminError === "Locatie opgeslagen." || adminError === "Tellers aangepast." || adminError === "Adres gekozen." ? "text-emerald-700" : "text-rose-600"}`}>
+                  <div className={`text-sm ${adminError === "Locatie opgeslagen." || adminError === "Locatie verwijderd." || adminError === "Tellers aangepast." || adminError === "Adres gekozen." ? "text-emerald-700" : "text-rose-600"}`}>
                     {adminError}
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  className={`${accentButtonClass} min-h-11 w-full px-5 py-3 text-sm font-medium sm:w-auto`}
-                >
-                  Locatie opslaan
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    type="submit"
+                    className={`${accentButtonClass} min-h-11 w-full px-5 py-3 text-sm font-medium sm:w-auto`}
+                  >
+                    Locatie opslaan
+                  </button>
+
+                  {editingPlaceName && (
+                    <button
+                      type="button"
+                      className="min-h-11 w-full rounded-xl border border-rose-300/70 bg-rose-50/80 px-5 py-3 text-sm font-semibold text-rose-700 shadow-[0_6px_18px_rgba(127,29,29,0.07)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-rose-400 hover:bg-rose-100/90 hover:shadow-[0_10px_24px_rgba(127,29,29,0.1)] active:translate-y-0 sm:w-auto"
+                      onClick={deleteAdminPlace}
+                    >
+                      Locatie verwijderen
+                    </button>
+                  )}
+                </div>
               </form>
 	            </div>
 	          )}
@@ -1876,7 +1953,17 @@ export default function MapClient({ places }: { places: Place[] }) {
 	      )}
 
       {viewMode === "map" ? (
-        <MapContainer center={[51.2194, 4.4025]} zoom={13} className="map-surface h-full w-full" zoomControl={false}>
+        <MapContainer
+          center={[51.2194, 4.4025]}
+          zoom={13}
+          className="map-surface h-full w-full"
+          zoomControl={false}
+          keyboard={false}
+          boxZoom={false}
+          doubleClickZoom
+          touchZoom={false}
+          tapHold={false}
+        >
         <MapViewportController focusTarget={focusTarget} />
         <MapInteractionController
           onMapClick={() => {
@@ -1960,10 +2047,12 @@ export default function MapClient({ places }: { places: Place[] }) {
           onClick={openSpotForm}
         >
           <span className="flex items-center gap-2">
-            <img
+            <Image
               src="/club-mate-logo.png"
               alt=""
               aria-hidden="true"
+              width={86}
+              height={24}
               className="h-5 w-auto object-contain sm:h-4"
             />
             <span>Gespot!</span>
@@ -2084,7 +2173,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       {selectedPlace && (
         <div className="fixed inset-0 z-[1100] flex items-end justify-center p-3 sm:items-end sm:justify-end sm:p-4" onClick={() => setSelectedPlaceName(null)}>
           <div
-            className="retro-info-panel w-full max-w-md overflow-auto rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/84 p-3.5 shadow-[0_28px_80px_rgba(52,38,31,0.3)] backdrop-blur-xl sm:max-h-[78dvh] sm:p-5"
+            className="retro-info-panel w-full max-w-md overflow-auto rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/84 p-3.5 shadow-[0_28px_80px_rgba(52,38,31,0.3)] backdrop-blur-xl sm:max-h-[78svh] sm:p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <PlaceDetails

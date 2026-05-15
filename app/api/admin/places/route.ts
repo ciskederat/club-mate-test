@@ -1,5 +1,5 @@
 import type { Place } from "@/data/placeTypes";
-import { savePlace, updateReportCounts } from "@/lib/placesDatabase";
+import { deletePlace, savePlace, updateReportCounts } from "@/lib/placesDatabase";
 
 const isValidAdminPin = (request: Request) => {
   const pin = request.headers.get("x-admin-pin");
@@ -59,4 +59,28 @@ export async function PATCH(request: Request) {
   }
 
   return Response.json({ place });
+}
+
+export async function DELETE(request: Request) {
+  if (!isValidAdminPin(request)) {
+    return Response.json({ error: "Niet toegelaten." }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => null) as {
+    place?: Place;
+  } | null;
+
+  if (!body?.place) {
+    return Response.json({ error: "Locatie ontbreekt." }, { status: 400 });
+  }
+
+  const deleted = await deletePlace(body.place)
+    .then(() => true)
+    .catch(() => false);
+
+  if (!deleted) {
+    return Response.json({ error: "Locatie verwijderen is mislukt." }, { status: 500 });
+  }
+
+  return Response.json({ ok: true });
 }
