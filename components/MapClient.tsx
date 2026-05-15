@@ -42,17 +42,19 @@ const userIcon = new L.Icon({
 });
 
 const filterOptions = [
-  { value: "all", label: "Alles" },
-  { value: "cafe", label: "Cafés" },
-  { value: "shop", label: "Supermarkten" },
+  { value: "all", label: "Alles", widthClass: "w-[100px] sm:w-[104px]" },
+  { value: "cafe", label: "Cafés", widthClass: "w-[114px] sm:w-[120px]" },
+  { value: "shop", label: "Supermarkten", widthClass: "w-[170px] sm:w-[182px]" },
 ];
 
 const accentButtonClass =
-  "rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[rgba(236,0,0,1)] shadow-sm transition hover:bg-[rgba(235,150,49,1)]";
+  "rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[#193882] shadow-sm transition hover:bg-[#dbb323]";
 const accentButtonActiveClass =
-  "rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(235,150,49,1)] text-[rgba(236,0,0,1)] shadow-sm ring-2 ring-[rgba(236,0,0,0.15)] transition";
+  "rounded-full border-3 border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[#193882] shadow-sm transition";
 const accentIconButtonClass =
-  "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[rgba(236,0,0,1)] transition hover:bg-[rgba(235,150,49,1)]";
+  "grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] text-[#193882] transition hover:bg-[#dbb323]";
+const notableHomeButtonClass =
+  "font-notable whitespace-nowrap text-center text-[13px] leading-[1.1] tracking-[0.05em] sm:text-[14px]";
 
 const defaultPlaceDetails: Record<string, Pick<Place, "address" | "hours">> = {
   korsakov: {
@@ -1441,43 +1443,45 @@ export default function MapClient({ places }: { places: Place[] }) {
   return (
     <div className="relative h-dvh w-screen overflow-hidden bg-slate-100">
       {showFloatingUi && (
-        <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-wrap justify-center gap-2 rounded-[1.75rem] bg-white/96 p-2.5 shadow-lg backdrop-blur sm:left-4 sm:right-auto sm:top-4 sm:justify-start sm:p-3">
+        <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-wrap justify-center gap-2 rounded-[1.75rem] border border-[#c91e15] bg-[#ecd2aa] p-2.5 shadow-lg backdrop-blur sm:left-4 sm:right-auto sm:top-4 sm:justify-start sm:p-3">
         <button
           type="button"
-          className={`${viewMode === "map" ? accentButtonActiveClass : accentButtonClass} min-h-10 px-4 py-2 text-sm sm:min-h-0 sm:py-2`}
+          className={`${notableHomeButtonClass} ${viewMode === "map" ? accentButtonActiveClass : accentButtonClass} min-h-[42px] w-[104px] px-3 py-2 sm:min-h-[40px] sm:w-[110px] sm:py-2`}
           onClick={() => selectViewMode("map")}
         >
           Kaart
         </button>
         <button
           type="button"
-          className={`${viewMode === "list" ? accentButtonActiveClass : accentButtonClass} min-h-10 px-4 py-2 text-sm sm:min-h-0 sm:py-2`}
+          className={`${notableHomeButtonClass} ${viewMode === "list" ? accentButtonActiveClass : accentButtonClass} min-h-[42px] w-[104px] px-3 py-2 sm:min-h-[40px] sm:w-[110px] sm:py-2`}
           onClick={() => selectViewMode("list")}
         >
           Lijst
         </button>
         <button
           type="button"
-          className={`${adminPanelOpen ? accentButtonActiveClass : accentButtonClass} min-h-10 px-4 py-2 text-sm sm:min-h-0 sm:py-2`}
+          className={`${adminPanelOpen ? accentButtonActiveClass : accentButtonClass} flex min-h-[42px] w-[52px] items-center justify-center px-0 py-2 text-[22px] leading-none sm:min-h-[40px] sm:w-[52px] sm:py-2`}
           onClick={() => {
             setSelectedPlaceName(null);
             setSpotFormOpen(false);
             setAdminPanelOpen((isOpen) => !isOpen);
           }}
+          aria-label="Beheer"
+          title="Beheer"
         >
-          Beheer
+          ⚙
         </button>
         </div>
       )}
 
       {showFloatingUi && (
-        <div className="absolute left-3 right-3 top-[5.25rem] z-[1000] flex flex-col gap-2 rounded-[1.75rem] bg-white/96 p-2.5 shadow-lg backdrop-blur sm:left-auto sm:right-4 sm:top-4 sm:w-auto sm:min-w-[15rem] sm:p-3">
-        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+        <div className="absolute left-3 right-3 top-[5.25rem] z-[1000] flex flex-col gap-2 rounded-[1.75rem] border border-[#c91e15] bg-[#ecd2aa] p-2.5 shadow-lg backdrop-blur sm:left-auto sm:right-4 sm:top-4 sm:w-auto sm:min-w-[15rem] sm:p-3">
+        <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
           {filterOptions.map((option) => (
             <button
               key={option.value}
               type="button"
-              className={`${filter === option.value ? accentButtonActiveClass : accentButtonClass} min-h-10 px-2 py-2 text-sm sm:min-h-0 sm:px-4 sm:py-2`}
+              className={`${notableHomeButtonClass} ${option.widthClass} ${filter === option.value ? accentButtonActiveClass : accentButtonClass} min-h-[44px] px-3 py-2 sm:min-h-[40px] sm:px-3 sm:py-2`}
               onClick={() => selectFilter(option.value)}
             >
               {option.label}
@@ -1486,12 +1490,12 @@ export default function MapClient({ places }: { places: Place[] }) {
         </div>
         <button
           type="button"
-          className={`${openNowOnly ? accentButtonActiveClass : accentButtonClass} flex min-h-10 items-center justify-center gap-2 px-3 py-2 text-sm sm:min-h-0 sm:py-2`}
+          className={`${notableHomeButtonClass} ${openNowOnly ? `${accentButtonActiveClass} border-emerald-500` : accentButtonClass} flex min-h-[44px] w-[152px] items-center justify-center gap-2 self-center px-3 py-2 sm:min-h-[40px] sm:w-[160px] sm:self-start sm:py-2`}
           onClick={toggleOpenNowOnly}
           aria-pressed={openNowOnly}
         >
           <span
-            className={`h-2 w-2 rounded-full ${openNowOnly ? "bg-[rgba(236,0,0,1)]" : "bg-[rgba(236,0,0,0.55)]"}`}
+            className={`h-2 w-2 rounded-full ${openNowOnly ? "bg-emerald-500" : "bg-[rgba(236,0,0,0.55)]"}`}
             aria-hidden="true"
           />
           Nu open
@@ -1914,7 +1918,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       {showFloatingUi && (
         <button
           type="button"
-          className="font-notable absolute bottom-4 left-1/2 z-[1000] flex h-[48px] w-[325px] -translate-x-1/2 items-center justify-center rounded-full border border-[rgba(236,0,0,1)] bg-[rgba(247,194,0,1)] px-[16px] text-center text-[22px] leading-[22px] text-[rgba(236,0,0,1)] shadow-lg transition hover:bg-[rgba(235,150,49,1)]"
+          className="font-notable absolute bottom-4 left-1/2 z-[1000] flex h-[52px] w-[min(92vw,360px)] -translate-x-1/2 items-center justify-center rounded-full border border-[#d8271d] bg-[rgba(247,194,0,1)] px-[18px] text-center text-[20px] leading-[20px] tracking-[0.06em] text-[#193882] shadow-lg transition hover:bg-[rgba(235,150,49,1)] sm:h-[48px] sm:w-[220px] sm:text-[22px] sm:leading-[22px]"
           onClick={openSpotForm}
         >
           <span className="relative top-[-2px]">Club Mate gespot!</span>
