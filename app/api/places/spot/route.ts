@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       name: body.name.trim(),
       address: body.address?.trim() || existingPlace?.address || "",
       position: [Number(body.latitude), Number(body.longitude)],
-      type: body.type ?? existingPlace?.type ?? "unknown",
+      type: body.type ?? existingPlace?.type ?? "other",
       info: mergedInfo,
       hours: body.hours?.length ? body.hours : existingPlace?.hours ?? [],
       presentCount: existingPlace?.presentCount ?? 0,

@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "";
 
     if (message.includes("places_type_check") || message.includes("check constraint")) {
-      throw new Error("Database laat type 'unknown' nog niet toe. Voer de Supabase type-migratie uit.");
+      throw new Error("Database laat type 'other' nog niet toe. Voer de Supabase type-migratie uit.");
     }
 
     throw error;

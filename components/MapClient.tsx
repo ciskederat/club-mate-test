@@ -206,7 +206,7 @@ const timeOptions = Array.from({ length: 48 }, (_, index) => {
 
 const createEmptyAdminForm = (): AdminPlaceForm => ({
   name: "",
-  type: "unknown",
+  type: "other",
   latitude: "",
   longitude: "",
   info: "Club Mate verkrijgbaar",
@@ -220,7 +220,7 @@ const createEmptySpotForm = (): SpotForm => ({
   info: "",
   latitude: null,
   longitude: null,
-  type: "unknown",
+  type: "other",
   hours: Array.from({ length: 7 }, () => [] as OpeningInterval[]),
   placeId: undefined,
 });
@@ -382,7 +382,7 @@ const formatHours = (hours: Place["hours"], todayIndex: number) =>
 const typeLabel = (type: Place["type"]) => {
   if (type === "cafe") return "Café";
   if (type === "shop") return "Supermarkt";
-  return "Onbekend";
+  return "Overig";
 };
 
 const reportStatusLabel = (status: MateReportStatus) =>
@@ -1419,7 +1419,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       info: "",
       latitude,
       longitude,
-      type: details?.type ?? suggestion.type ?? "unknown",
+      type: details?.type ?? suggestion.type ?? "other",
       hours: details?.hours ?? Array.from({ length: 7 }, () => [] as OpeningInterval[]),
       placeId: suggestion.placeId,
     });
@@ -1766,7 +1766,7 @@ export default function MapClient({ places }: { places: Place[] }) {
                     >
                       <option value="cafe">Café</option>
                       <option value="shop">Supermarkt</option>
-                      <option value="unknown">Onbekend</option>
+                      <option value="other">Overig</option>
                     </select>
                   </label>
                 </div>

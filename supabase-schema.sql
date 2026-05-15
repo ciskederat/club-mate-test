@@ -3,7 +3,7 @@ create extension if not exists pgcrypto;
 create table if not exists places (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  type text not null check (type in ('cafe', 'shop', 'unknown')),
+  type text not null check (type in ('cafe', 'shop', 'other')),
   address text,
   latitude double precision not null,
   longitude double precision not null,
@@ -18,7 +18,7 @@ create table if not exists places (
 );
 
 alter table places drop constraint if exists places_type_check;
-alter table places add constraint places_type_check check (type in ('cafe', 'shop', 'unknown'));
+alter table places add constraint places_type_check check (type in ('cafe', 'shop', 'other'));
 
 create unique index if not exists places_name_unique on places (name);
 

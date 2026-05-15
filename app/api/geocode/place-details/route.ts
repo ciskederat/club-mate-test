@@ -8,7 +8,7 @@ const mapGoogleTypeToPlaceType = (primaryType?: string | null, googleMapsTypeLab
   const combinedTypeText = `${normalizedPrimaryType} ${normalizedTypeLabel}`;
 
   if (!combinedTypeText.trim()) {
-    return "unknown";
+    return "other";
   }
 
   if (
@@ -36,7 +36,7 @@ const mapGoogleTypeToPlaceType = (primaryType?: string | null, googleMapsTypeLab
     return "cafe";
   }
 
-  return "unknown";
+  return "other";
 };
 
 export async function GET(request: Request) {
