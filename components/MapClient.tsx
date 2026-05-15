@@ -514,6 +514,7 @@ function PlaceDetails({
 }) {
   const [hoursOpen, setHoursOpen] = useState(false);
   const formattedHours = formatHours(place.hours, todayIndex);
+  const hasFixedHours = Boolean(place.hours?.some((dayHours) => dayHours.length > 0));
 
   return (
     <div className="space-y-3.5 text-slate-900 sm:space-y-4">
@@ -618,7 +619,7 @@ function PlaceDetails({
 
         {hoursOpen && (
           <div className="space-y-2 animate-[panelReveal_180ms_ease-out]">
-            {formattedHours.length > 0 ? (
+            {hasFixedHours ? (
               formattedHours.map((item) => (
                 <div
                   key={item.key}
@@ -628,13 +629,13 @@ function PlaceDetails({
                 >
                   <div className="font-medium capitalize">
                     {item.day}
-                    {item.isToday ? " vandaag" : ""}
+                    {item.isToday ? " " : ""}
                   </div>
                   <div className="text-right">{item.value}</div>
                 </div>
               ))
             ) : (
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-500">Geen openingsuren bekend.</div>
+              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-500">Geen vaste openingsuren gevonden.</div>
             )}
           </div>
         )}
