@@ -202,6 +202,7 @@ type SpotForm = {
 const mateReportsStorageKey = "clubmate-map-reports";
 const adminSessionStorageKey = "clubmate-map-admin-unlocked";
 const adminSessionPasscodeKey = "clubmate-map-admin-code";
+const introSeenStorageKey = "mate-alert-intro-seen";
 
 const normalizeType = (value: unknown) =>
   value
@@ -929,6 +930,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
+  const [introPanelOpen, setIntroPanelOpen] = useState(false);
   const [selectedPlaceName, setSelectedPlaceName] = useState<string | null>(null);
   const [focusTarget, setFocusTarget] = useState<[number, number] | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -961,6 +963,20 @@ export default function MapClient({ places }: { places: Place[] }) {
       return {};
     }
   });
+
+  useEffect(() => {
+    if (window.localStorage.getItem(introSeenStorageKey) === "true") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setIntroPanelOpen(true);
+    }, 450);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1860,9 +1876,14 @@ export default function MapClient({ places }: { places: Place[] }) {
     window.open(getAutomaticDirectionsUrl(target), "_blank", "noreferrer");
   };
 
+  const closeIntroPanel = () => {
+    window.localStorage.setItem(introSeenStorageKey, "true");
+    setIntroPanelOpen(false);
+  };
+
   const selectedMateReport = selectedPlace ? getMateReport(selectedPlace.name) : undefined;
   const selectedPlaceWasLastReportedAbsent = selectedMateReport?.lastStatus === "absent";
-  const showFloatingUi = !adminPanelOpen && !spotFormOpen && !infoPanelOpen;
+  const showFloatingUi = !adminPanelOpen && !spotFormOpen && !infoPanelOpen && !introPanelOpen;
 
   return (
     <div className="relative h-svh w-screen overflow-hidden bg-slate-100">
@@ -2644,6 +2665,70 @@ export default function MapClient({ places }: { places: Place[] }) {
                 </Button>
               </div>
             </div>
+          </motion.div>
+        </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {introPanelOpen && (
+        <motion.div
+          key="intro-panel"
+          className="fixed inset-0 z-[1180] grid place-items-center bg-slate-950/38 p-3 backdrop-blur-sm sm:p-6"
+          onClick={closeIntroPanel}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.div
+            className="retro-modal w-full max-w-[25rem] overflow-hidden rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/92 p-5 text-slate-800 shadow-[0_28px_80px_rgba(52,38,31,0.28)] backdrop-blur-xl sm:p-6"
+            onClick={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 14, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.985 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="relative h-8 w-44 sm:h-9 sm:w-52" aria-label="Mate Alert">
+                <Image
+                  src="/mate%20alert.png"
+                  alt="Mate Alert"
+                  fill
+                  sizes="208px"
+                  className="object-contain object-left"
+                  priority={false}
+                />
+              </div>
+              <button
+                type="button"
+                className={accentIconButtonClass}
+                onClick={closeIntroPanel}
+                aria-label="Sluit uitleg"
+              >
+                <X className="h-4 w-4" aria-hidden="true" strokeWidth={2.3} />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-3 text-sm leading-relaxed text-slate-700">
+              <p>
+                Mate Alert toont plekken waar mensen Club Mate hebben gevonden.
+                Klik op een pin voor adres, openingsuren en voorraadmeldingen.
+              </p>
+              <p>
+                Zie je ergens Club Mate staan? Gebruik de grote Mate Alert knop
+                onderaan om die spot toe te voegen. Klopt een locatie niet meer,
+                meld dan dat Club Mate niet meer aanwezig is.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className={`${accentButtonClass} mt-5 min-h-11 w-full px-5 py-3 text-sm font-semibold`}
+              onClick={closeIntroPanel}
+            >
+              Starten
+            </button>
           </motion.div>
         </motion.div>
         )}
