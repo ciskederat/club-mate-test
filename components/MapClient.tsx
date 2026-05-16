@@ -212,6 +212,9 @@ const normalizeType = (value: unknown) =>
     .toLowerCase()
     .trim() ?? "";
 
+const getPlaceKey = (place: Place) =>
+  place.id ?? `${normalizeType(place.name)}-${place.position[0]}-${place.position[1]}-${normalizeType(place.address)}`;
+
 const createEmptyHours = () => Array.from({ length: 7 }, () => "");
 const timeOptions = Array.from({ length: 48 }, (_, index) => {
   const hours = Math.floor(index / 2).toString().padStart(2, "0");
@@ -794,7 +797,7 @@ function ClusteredPlaceMarkers({
   onPlaceClick,
 }: {
   places: Place[];
-  onPlaceClick: (placeName: string) => void;
+  onPlaceClick: (placeKey: string) => void;
 }) {
   const map = useMap();
 
@@ -835,7 +838,7 @@ function ClusteredPlaceMarkers({
       });
 
       marker.on("click", () => {
-        onPlaceClick(place.name);
+        onPlaceClick(getPlaceKey(place));
       });
 
       clusterGroup.addLayer(marker);
@@ -1185,7 +1188,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const todayIndex = useMemo(() => getBrusselsTimeParts(now).dayIndex, [now]);
   const normalizedFilter = useMemo(() => normalizeType(filter), [filter]);
   const placeStatuses = useMemo(
-    () => new Map(safePlaces.map((place) => [place.name, getOpenStatus(place, now)])),
+    () => new Map(safePlaces.map((place) => [getPlaceKey(place), getOpenStatus(place, now)])),
     [safePlaces, now],
   );
 
@@ -1198,7 +1201,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       return placesByType;
     }
 
-    return placesByType.filter((place) => placeStatuses.get(place.name)?.isOpen);
+    return placesByType.filter((place) => placeStatuses.get(getPlaceKey(place))?.isOpen);
   }, [safePlaces, normalizedFilter, openNowOnly, placeStatuses]);
 
   const visiblePlaces = filteredPlaces;
@@ -1217,7 +1220,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   }, [filteredPlaces, userLocation]);
 
   const selectedPlace = useMemo(
-    () => safePlaces.find((place) => place.name === selectedPlaceName) ?? null,
+    () => safePlaces.find((place) => getPlaceKey(place) === selectedPlaceName) ?? null,
     [safePlaces, selectedPlaceName],
   );
   const selectedPlaceDistance = useMemo(() => {
@@ -1358,7 +1361,7 @@ export default function MapClient({ places }: { places: Place[] }) {
 
   const startEditingPlace = (place: Place) => {
     const nextForm = createAdminFormFromPlace(place);
-    setEditingPlaceName(place.name);
+    setEditingPlaceName(getPlaceKey(place));
     setAdminForm(nextForm);
     lastSavedAdminSignatureRef.current = getAdminFormSignature(nextForm);
     setAdminAutoSaveStatus("idle");
@@ -1460,9 +1463,8 @@ export default function MapClient({ places }: { places: Place[] }) {
 
   const updatePlaceInState = (updatedPlace: Place, fallbackName?: string) => {
     setDatabasePlaces((currentPlaces) => {
-      const updatedKey = normalizeType(fallbackName ?? updatedPlace.name);
       const existingIndex = currentPlaces.findIndex((place) =>
-        (updatedPlace.id && place.id === updatedPlace.id) || normalizeType(place.name) === updatedKey,
+        (updatedPlace.id && place.id === updatedPlace.id) || (fallbackName ? getPlaceKey(place) === fallbackName : false),
       );
 
       if (existingIndex < 0) {
@@ -1478,7 +1480,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       currentPlaces.filter((place) =>
         placeToRemove.id
           ? place.id !== placeToRemove.id
-          : normalizeType(place.name) !== normalizeType(placeToRemove.name),
+          : getPlaceKey(place) !== getPlaceKey(placeToRemove),
       ),
     );
   };
@@ -1491,7 +1493,7 @@ export default function MapClient({ places }: { places: Place[] }) {
     const latitude = Number(adminForm.latitude);
     const longitude = Number(adminForm.longitude);
     const parsedHours = parseAdminHours(adminForm.dayHours);
-    const editingPlace = safePlaces.find((place) => normalizeType(place.name) === normalizeType(editingPlaceName));
+    const editingPlace = safePlaces.find((place) => getPlaceKey(place) === editingPlaceName);
 
     if (!adminForm.name.trim()) {
       const message = "Naam is verplicht.";
@@ -1544,7 +1546,7 @@ export default function MapClient({ places }: { places: Place[] }) {
         },
         body: JSON.stringify({
           place: nextPlace,
-          previousName: editingPlaceName,
+          previousName: editingPlace?.name,
         }),
       });
       const data = await response.json().catch(() => null);
@@ -1563,8 +1565,8 @@ export default function MapClient({ places }: { places: Place[] }) {
       }
 
       updatePlaceInState(data.place, editingPlaceName ?? nextPlace.name);
-      setSelectedPlaceName(data.place.name);
-      setEditingPlaceName(data.place.name);
+      setSelectedPlaceName(getPlaceKey(data.place));
+      setEditingPlaceName(getPlaceKey(data.place));
       const savedForm = createAdminFormFromPlace(data.place);
       setAdminForm(savedForm);
       lastSavedAdminSignatureRef.current = getAdminFormSignature(savedForm);
@@ -1635,7 +1637,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   }, [adminForm, adminPanelOpen, isAdminUnlocked]);
 
   const deleteAdminPlace = async () => {
-    const editingPlace = safePlaces.find((place) => normalizeType(place.name) === normalizeType(editingPlaceName));
+    const editingPlace = safePlaces.find((place) => getPlaceKey(place) === editingPlaceName);
 
     if (!editingPlace) {
       const message = "Kies eerst een locatie om te verwijderen.";
@@ -1675,7 +1677,7 @@ export default function MapClient({ places }: { places: Place[] }) {
 
       removePlaceFromState(editingPlace);
       setSelectedPlaceName((placeName) =>
-        normalizeType(placeName) === normalizeType(editingPlace.name) ? null : placeName,
+        placeName === getPlaceKey(editingPlace) ? null : placeName,
       );
       setEditingPlaceName(null);
       setAdminForm(createEmptyAdminForm());
@@ -1761,8 +1763,8 @@ export default function MapClient({ places }: { places: Place[] }) {
         return;
       }
 
-      updatePlaceInState(data.place, spotForm.name);
-      setSelectedPlaceName(data.place.name);
+      updatePlaceInState(data.place);
+      setSelectedPlaceName(getPlaceKey(data.place));
       setFocusTarget(data.place.position);
       closeSpotForm();
       toast.success("Spot doorgegeven.");
@@ -1776,12 +1778,12 @@ export default function MapClient({ places }: { places: Place[] }) {
   };
 
   const getMateReport = (placeName: string) => {
-    const place = safePlaces.find((candidatePlace) => normalizeType(candidatePlace.name) === normalizeType(placeName));
+    const place = safePlaces.find((candidatePlace) => getPlaceKey(candidatePlace) === placeName);
     return getMateReportFromPlace(place) ?? localMateReports[normalizeType(placeName)];
   };
 
   const reportMateStatus = async (placeName: string, status: MateReportStatus) => {
-    const place = safePlaces.find((candidatePlace) => normalizeType(candidatePlace.name) === normalizeType(placeName));
+    const place = safePlaces.find((candidatePlace) => getPlaceKey(candidatePlace) === placeName);
 
     if (!place) {
       return false;
@@ -1805,7 +1807,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       if (data.deleted) {
         removePlaceFromState(place);
         setSelectedPlaceName((currentName) =>
-          normalizeType(currentName) === normalizeType(place.name) ? null : currentName,
+          currentName === getPlaceKey(place) ? null : currentName,
         );
         toast.error(`${place.name} is verwijderd na 5 afwezig-meldingen op rij.`);
         return true;
@@ -1820,7 +1822,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   };
 
   const updateMateReportCounts = async (placeName: string, presentCount: number, absentCount: number) => {
-    const place = safePlaces.find((candidatePlace) => normalizeType(candidatePlace.name) === normalizeType(placeName));
+    const place = safePlaces.find((candidatePlace) => getPlaceKey(candidatePlace) === placeName);
 
     if (!place) {
       return;
@@ -1881,7 +1883,7 @@ export default function MapClient({ places }: { places: Place[] }) {
     setIntroPanelOpen(false);
   };
 
-  const selectedMateReport = selectedPlace ? getMateReport(selectedPlace.name) : undefined;
+  const selectedMateReport = selectedPlace ? getMateReport(getPlaceKey(selectedPlace)) : undefined;
   const selectedPlaceWasLastReportedAbsent = selectedMateReport?.lastStatus === "absent";
   const showFloatingUi = !adminPanelOpen && !spotFormOpen && !infoPanelOpen && !introPanelOpen;
 
@@ -2057,10 +2059,10 @@ export default function MapClient({ places }: { places: Place[] }) {
                 <div className="space-y-2">
                   {safePlaces.map((place) => (
                     <button
-                      key={place.name}
+                      key={getPlaceKey(place)}
                       type="button"
                       className={`min-h-12 w-full rounded-2xl border px-4 py-3 text-left text-sm transition ${
-                        normalizeType(editingPlaceName) === normalizeType(place.name)
+                        editingPlaceName === getPlaceKey(place)
                           ? "border-[#8d3f35]/65 bg-[#d5a83b] text-[#26304a] shadow-[0_8px_20px_rgba(52,38,31,0.14)]"
                           : "border-[#9f4a3d]/35 bg-[#fff8e8]/72 text-[#46362d] hover:border-[#9f4a3d]/55 hover:bg-[#e5bd48]/35"
                       }`}
@@ -2292,11 +2294,11 @@ export default function MapClient({ places }: { places: Place[] }) {
                           min="0"
                           step="1"
                           className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
-                          value={getMateReport(adminForm.name)?.presentCount ?? 0}
+                          value={editingPlaceName ? (getMateReport(editingPlaceName)?.presentCount ?? 0) : 0}
                           onChange={(event) => {
-                            const currentReport = getMateReport(adminForm.name);
+                            const currentReport = editingPlaceName ? getMateReport(editingPlaceName) : undefined;
                             updateMateReportCounts(
-                              adminForm.name,
+                              editingPlaceName ?? "",
                               Number(event.target.value),
                               currentReport?.absentCount ?? 0,
                             );
@@ -2310,11 +2312,11 @@ export default function MapClient({ places }: { places: Place[] }) {
                           min="0"
                           step="1"
                           className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-base text-slate-900"
-                          value={getMateReport(adminForm.name)?.absentCount ?? 0}
+                          value={editingPlaceName ? (getMateReport(editingPlaceName)?.absentCount ?? 0) : 0}
                           onChange={(event) => {
-                            const currentReport = getMateReport(adminForm.name);
+                            const currentReport = editingPlaceName ? getMateReport(editingPlaceName) : undefined;
                             updateMateReportCounts(
-                              adminForm.name,
+                              editingPlaceName ?? "",
                               currentReport?.presentCount ?? 0,
                               Number(event.target.value),
                             );
@@ -2438,14 +2440,14 @@ export default function MapClient({ places }: { places: Place[] }) {
               </div>
             ) : (
               listPlaces.map((place: PlaceWithDistance) => {
-                const status = placeStatuses.get(place.name) ?? getOpenStatus(place, now);
+                const status = placeStatuses.get(getPlaceKey(place)) ?? getOpenStatus(place, now);
 
                 return (
                 <button
-                  key={place.name}
+                  key={getPlaceKey(place)}
                   type="button"
                   className="retro-modal w-full rounded-2xl border border-white/60 bg-[#fff8e8]/72 p-4 text-left shadow-[0_10px_30px_rgba(52,38,31,0.08)] backdrop-blur transition duration-200 ease-out hover:-translate-y-0.5 hover:border-[#9f4a3d]/30 hover:shadow-[0_16px_38px_rgba(52,38,31,0.13)] focus:outline-none focus:ring-2 focus:ring-[#e5bd48]/35 sm:p-5"
-                  onClick={() => setSelectedPlaceName(place.name)}
+                  onClick={() => setSelectedPlaceName(getPlaceKey(place))}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <div>
@@ -2884,7 +2886,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             <PlaceDetails
               key={selectedPlace.name}
               place={selectedPlace}
-              status={placeStatuses.get(selectedPlace.name) ?? getOpenStatus(selectedPlace, now)}
+              status={placeStatuses.get(getPlaceKey(selectedPlace)) ?? getOpenStatus(selectedPlace, now)}
               distance={selectedPlaceDistance}
               mateReport={selectedMateReport}
               onMateReport={(placeName, status) => setPendingMateReport({ placeName, status })}

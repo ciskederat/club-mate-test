@@ -25,7 +25,8 @@ update places
 set consecutive_absent_count = case when last_report_status = 'absent' then least(absent_count, 4) else 0 end
 where consecutive_absent_count is null or consecutive_absent_count = 0;
 
-create unique index if not exists places_name_unique on places (name);
+drop index if exists places_name_unique;
+create unique index if not exists places_unique_location on places (name, latitude, longitude);
 
 insert into places (name, type, address, latitude, longitude, info, hours)
 values
@@ -56,4 +57,4 @@ values
     'Supermarkt met Club Mate',
     '[[],[{"open":"08:00","close":"20:00"}],[{"open":"08:00","close":"20:00"}],[{"open":"08:00","close":"20:00"}],[{"open":"08:00","close":"20:00"}],[{"open":"08:00","close":"21:00"}],[{"open":"08:00","close":"20:00"}]]'
   )
-on conflict (name) do nothing;
+on conflict (name, latitude, longitude) do nothing;

@@ -8,6 +8,22 @@ const normalizeText = (value: string) =>
     .trim()
     .toLowerCase();
 
+const isSameKnownLocation = (place: Place, body: { name?: string; address?: string; latitude?: number; longitude?: number }) => {
+  if (normalizeText(place.name) !== normalizeText(body.name ?? "")) {
+    return false;
+  }
+
+  const normalizedExistingAddress = normalizeText(place.address ?? "");
+  const normalizedNextAddress = normalizeText(body.address ?? "");
+
+  if (normalizedExistingAddress && normalizedNextAddress && normalizedExistingAddress === normalizedNextAddress) {
+    return true;
+  }
+
+  return Math.abs(place.position[0] - Number(body.latitude)) < 0.00001
+    && Math.abs(place.position[1] - Number(body.longitude)) < 0.00001;
+};
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as {
     name?: string;
@@ -24,7 +40,7 @@ export async function POST(request: Request) {
   }
 
   const places = await getPlaces();
-  const existingPlace = places.find((place) => normalizeText(place.name) === normalizeText(body.name ?? ""));
+  const existingPlace = places.find((place) => isSameKnownLocation(place, body));
   const extraInfo = body.info?.trim();
   const mergedInfo = extraInfo
     ? existingPlace?.info && !existingPlace.info.includes(extraInfo)
