@@ -70,6 +70,102 @@ const mapGoogleTypeToPlaceType = (types?: string[], text?: string | null) => {
   return inferPlaceTypeFromText(text);
 };
 
+const getGoogleAutocompleteError = async (response: Response | null) => {
+  if (!response) {
+    return "Google suggesties ophalen is mislukt. Google is niet bereikbaar.";
+  }
+
+  const text = await response.text().catch(() => "");
+
+  try {
+    const data = JSON.parse(text) as {
+      error?: {
+        message?: string;
+        status?: string;
+      };
+      error_message?: string;
+      status?: string;
+    };
+    const message = data.error?.message ?? data.error_message;
+    const status = data.error?.status ?? data.status;
+
+    if (message || status) {
+      return `Google suggesties ophalen is mislukt: ${message ?? status}.`;
+    }
+  } catch {
+    // Fall through to the generic status message below.
+  }
+
+  return `Google suggesties ophalen is mislukt. Google gaf status ${response.status}.`;
+};
+
+const fetchLegacyGoogleSuggestions = async (query: string, apiKey: string, sessionToken?: string) => {
+  const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
+  url.searchParams.set("input", query);
+  url.searchParams.set("components", "country:be");
+  url.searchParams.set("language", "nl");
+  url.searchParams.set("location", "51.2194,4.4025");
+  url.searchParams.set("radius", "25000");
+  url.searchParams.set("key", apiKey);
+
+  if (sessionToken) {
+    url.searchParams.set("sessiontoken", sessionToken);
+  }
+
+  const response = await fetch(url, { cache: "no-store" }).catch(() => null);
+
+  if (!response?.ok) {
+    return {
+      suggestions: [],
+      error: await getGoogleAutocompleteError(response),
+    };
+  }
+
+  const data = await response.json().catch(() => null) as {
+    status?: string;
+    error_message?: string;
+    predictions?: Array<{
+      place_id?: string;
+      description?: string;
+      structured_formatting?: {
+        main_text?: string;
+        secondary_text?: string;
+      };
+      types?: string[];
+    }>;
+  } | null;
+
+  if (data?.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    return {
+      suggestions: [],
+      error: `Google suggesties ophalen is mislukt: ${data.error_message ?? data.status}.`,
+    };
+  }
+
+  return {
+    suggestions: (data?.predictions ?? [])
+      .map((prediction) => {
+        const fullLabel = prediction.description?.trim();
+        const name = prediction.structured_formatting?.main_text?.trim() || fullLabel;
+        const secondaryText = prediction.structured_formatting?.secondary_text?.trim();
+
+        if (!prediction.place_id || !fullLabel || !name) {
+          return null;
+        }
+
+        return {
+          placeId: prediction.place_id,
+          placeResourceName: `places/${prediction.place_id}`,
+          label: secondaryText ? `${name}, ${secondaryText}` : fullLabel,
+          name,
+          type: mapGoogleTypeToPlaceType(prediction.types, `${name} ${fullLabel}`),
+        };
+      })
+      .filter(Boolean),
+    error: null,
+  };
+};
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim();
@@ -115,9 +211,19 @@ export async function GET(request: Request) {
   }).catch(() => null);
 
   if (!googleResponse?.ok) {
+    const legacyResult = await fetchLegacyGoogleSuggestions(query, googleApiKey, sessionToken);
+
+    if (legacyResult.suggestions.length > 0 || legacyResult.error === null) {
+      return Response.json({
+        provider: "google-legacy",
+        suggestions: legacyResult.suggestions,
+        error: legacyResult.error,
+      });
+    }
+
     return Response.json({
       suggestions: [],
-      error: "Google suggesties ophalen is mislukt. Controleer je Google Maps API key.",
+      error: await getGoogleAutocompleteError(googleResponse),
     });
   }
 
