@@ -250,6 +250,17 @@ const createAdminFormFromPlace = (place: Place): AdminPlaceForm => ({
   dayHours: formatHoursForAdmin(place.hours),
 });
 
+const getAdminFormSignature = (form: AdminPlaceForm) =>
+  JSON.stringify({
+    name: form.name.trim(),
+    type: form.type,
+    latitude: form.latitude.trim(),
+    longitude: form.longitude.trim(),
+    info: form.info.trim(),
+    address: form.address.trim(),
+    dayHours: form.dayHours.map((value) => value.trim()),
+  });
+
 const parseAdminDayHours = (value: string): OpeningInterval[] | null => {
   const trimmedValue = value.trim();
 
@@ -854,6 +865,9 @@ export default function MapClient({ places }: { places: Place[] }) {
   });
   const [editingPlaceName, setEditingPlaceName] = useState<string | null>(null);
   const [adminForm, setAdminForm] = useState<AdminPlaceForm>(() => createEmptyAdminForm());
+  const [adminAutoSaveStatus, setAdminAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const lastSavedAdminSignatureRef = useRef(getAdminFormSignature(createEmptyAdminForm()));
+  const adminAutoSaveTimerRef = useRef<number | null>(null);
   const [quickHoursScope, setQuickHoursScope] = useState<"all" | "weekdays" | "weekend">("weekdays");
   const [quickHoursOpen, setQuickHoursOpen] = useState("09:00");
   const [quickHoursClose, setQuickHoursClose] = useState("18:00");
@@ -1273,7 +1287,10 @@ export default function MapClient({ places }: { places: Place[] }) {
 
   const startAddingPlace = () => {
     setEditingPlaceName(null);
-    setAdminForm(createEmptyAdminForm());
+    const emptyForm = createEmptyAdminForm();
+    setAdminForm(emptyForm);
+    lastSavedAdminSignatureRef.current = getAdminFormSignature(emptyForm);
+    setAdminAutoSaveStatus("idle");
     setAddressSuggestionSelected(false);
     setAddressSuggestions([]);
     setAddressSuggestionMessage(null);
@@ -1281,8 +1298,11 @@ export default function MapClient({ places }: { places: Place[] }) {
   };
 
   const startEditingPlace = (place: Place) => {
+    const nextForm = createAdminFormFromPlace(place);
     setEditingPlaceName(place.name);
-    setAdminForm(createAdminFormFromPlace(place));
+    setAdminForm(nextForm);
+    lastSavedAdminSignatureRef.current = getAdminFormSignature(nextForm);
+    setAdminAutoSaveStatus("idle");
     setAddressSuggestionSelected(true);
     setAddressSuggestions([]);
     setAddressSuggestionMessage(null);
@@ -1404,7 +1424,11 @@ export default function MapClient({ places }: { places: Place[] }) {
     );
   };
 
-  const saveAdminPlace = async () => {
+  const saveAdminPlace = async ({
+    closePanel = true,
+    showSuccessToast = true,
+    showValidationErrors = true,
+  } = {}) => {
     const latitude = Number(adminForm.latitude);
     const longitude = Number(adminForm.longitude);
     const parsedHours = parseAdminHours(adminForm.dayHours);
@@ -1412,23 +1436,29 @@ export default function MapClient({ places }: { places: Place[] }) {
 
     if (!adminForm.name.trim()) {
       const message = "Naam is verplicht.";
-      setAdminError(message);
-      toast.error(message);
-      return;
+      if (showValidationErrors) {
+        setAdminError(message);
+        toast.error(message);
+      }
+      return false;
     }
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       const message = "Latitude en longitude moeten geldige nummers zijn.";
-      setAdminError(message);
-      toast.error(message);
-      return;
+      if (showValidationErrors) {
+        setAdminError(message);
+        toast.error(message);
+      }
+      return false;
     }
 
     if (!parsedHours) {
       const message = "Gebruik openingsuren zoals 12:00-18:00, of laat leeg voor gesloten.";
-      setAdminError(message);
-      toast.error(message);
-      return;
+      if (showValidationErrors) {
+        setAdminError(message);
+        toast.error(message);
+      }
+      return false;
     }
 
     const nextPlace: Place = {
@@ -1462,29 +1492,85 @@ export default function MapClient({ places }: { places: Place[] }) {
 
       if (response.status === 401) {
         lockAdmin();
-        return;
+        return false;
       }
 
       if (!response.ok || !data?.place) {
         const message = data?.error ?? "Locatie opslaan is mislukt.";
         setAdminError(message);
         toast.error(message);
-        return;
+        setAdminAutoSaveStatus("error");
+        return false;
       }
 
       updatePlaceInState(data.place, editingPlaceName ?? nextPlace.name);
       setSelectedPlaceName(data.place.name);
       setEditingPlaceName(data.place.name);
-      setAdminForm(createAdminFormFromPlace(data.place));
+      const savedForm = createAdminFormFromPlace(data.place);
+      setAdminForm(savedForm);
+      lastSavedAdminSignatureRef.current = getAdminFormSignature(savedForm);
       setAdminError("Locatie opgeslagen.");
-      setAdminPanelOpen(false);
-      toast.success("Locatie opgeslagen.");
+      setAdminAutoSaveStatus("saved");
+
+      if (closePanel) {
+        setAdminPanelOpen(false);
+      }
+
+      if (showSuccessToast) {
+        toast.success("Locatie opgeslagen.");
+      }
+
+      return true;
     } catch {
       const message = "Locatie opslaan is mislukt.";
       setAdminError(message);
       toast.error(message);
+      setAdminAutoSaveStatus("error");
+      return false;
     }
   };
+
+  useEffect(() => {
+    if (!adminPanelOpen || !isAdminUnlocked) {
+      setAdminAutoSaveStatus("idle");
+      return;
+    }
+
+    const signature = getAdminFormSignature(adminForm);
+    const latitude = Number(adminForm.latitude);
+    const longitude = Number(adminForm.longitude);
+    const parsedHours = parseAdminHours(adminForm.dayHours);
+    const canAutoSave =
+      adminForm.name.trim().length > 0
+      && Number.isFinite(latitude)
+      && Number.isFinite(longitude)
+      && Boolean(parsedHours)
+      && signature !== lastSavedAdminSignatureRef.current;
+
+    if (!canAutoSave) {
+      return;
+    }
+
+    setAdminAutoSaveStatus("saving");
+
+    if (adminAutoSaveTimerRef.current != null) {
+      window.clearTimeout(adminAutoSaveTimerRef.current);
+    }
+
+    adminAutoSaveTimerRef.current = window.setTimeout(() => {
+      saveAdminPlace({
+        closePanel: false,
+        showSuccessToast: false,
+        showValidationErrors: false,
+      });
+    }, 900);
+
+    return () => {
+      if (adminAutoSaveTimerRef.current != null) {
+        window.clearTimeout(adminAutoSaveTimerRef.current);
+      }
+    };
+  }, [adminForm, adminPanelOpen, isAdminUnlocked]);
 
   const deleteAdminPlace = async () => {
     const editingPlace = safePlaces.find((place) => normalizeType(place.name) === normalizeType(editingPlaceName));
@@ -2178,12 +2264,32 @@ export default function MapClient({ places }: { places: Place[] }) {
                   </div>
                 )}
 
+                {isAdminUnlocked && (
+                  <div className={`text-xs font-semibold ${
+                    adminAutoSaveStatus === "error"
+                      ? "text-rose-600"
+                      : adminAutoSaveStatus === "saving"
+                        ? "text-amber-700"
+                        : adminAutoSaveStatus === "saved"
+                          ? "text-emerald-700"
+                          : "text-slate-500"
+                  }`}>
+                    {adminAutoSaveStatus === "saving"
+                      ? "Automatisch opslaan..."
+                      : adminAutoSaveStatus === "saved"
+                        ? "Automatisch opgeslagen"
+                        : adminAutoSaveStatus === "error"
+                          ? "Automatisch opslaan mislukt"
+                          : "Wijzigingen worden automatisch opgeslagen"}
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="submit"
                     className={`${accentButtonClass} min-h-11 w-full px-5 py-3 text-sm font-medium sm:w-auto`}
                   >
-                    Locatie opslaan
+                    Opslaan en sluiten
                   </button>
 
                   {editingPlaceName && (

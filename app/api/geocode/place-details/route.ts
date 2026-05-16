@@ -134,6 +134,23 @@ type GooglePlaceDetails = {
   websiteUri?: string;
 };
 
+type LegacyGooglePlaceDetails = {
+  place_id?: string;
+  name?: string;
+  formatted_address?: string;
+  geometry?: {
+    location?: {
+      lat?: number;
+      lng?: number;
+    };
+  };
+  types?: string[];
+  opening_hours?: GoogleOpeningHours & {
+    weekday_text?: string[];
+  };
+  website?: string;
+};
+
 const hasAnyHours = (hours: OpeningInterval[][]) => hours.some((dayHours) => dayHours.length > 0);
 
 const firstHoursWithData = (...hourSets: OpeningInterval[][][]) =>
@@ -196,6 +213,52 @@ const buildGooglePlaceDetailsResponse = (
   };
 };
 
+const buildLegacyGooglePlaceDetailsResponse = (
+  place: LegacyGooglePlaceDetails | null | undefined,
+  fallbackPlaceId?: string | null,
+  provider = "google-legacy",
+) => {
+  const parsedHours = firstHoursWithData(
+    parseGoogleOpeningHours(place?.opening_hours),
+    parseWeekdayDescriptions(place?.opening_hours?.weekdayDescriptions),
+    parseWeekdayDescriptions(place?.opening_hours?.weekday_text),
+  );
+
+  return {
+    provider,
+    placeId: place?.place_id ?? fallbackPlaceId ?? null,
+    hours: parsedHours,
+    rawOpeningHours: place?.opening_hours ?? null,
+    address: place?.formatted_address ?? null,
+    name: place?.name ?? null,
+    website: place?.website ?? null,
+    latitude: place?.geometry?.location?.lat ?? null,
+    longitude: place?.geometry?.location?.lng ?? null,
+    type: mapGoogleTypeToPlaceType(null, null, place?.types),
+  };
+};
+
+const fetchLegacyGoogleDetails = async (apiKey: string, placeId: string) => {
+  const url = new URL("https://maps.googleapis.com/maps/api/place/details/json");
+  url.searchParams.set("place_id", placeId);
+  url.searchParams.set("fields", "place_id,name,formatted_address,geometry,opening_hours,types,website");
+  url.searchParams.set("language", "nl");
+  url.searchParams.set("key", apiKey);
+
+  const response = await fetch(url, { cache: "no-store" }).catch(() => null);
+
+  if (!response?.ok) {
+    return null;
+  }
+
+  const data = await response.json().catch(() => null) as {
+    status?: string;
+    result?: LegacyGooglePlaceDetails;
+  } | null;
+
+  return data?.status === "OK" ? data.result ?? null : null;
+};
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const placeId = searchParams.get("id")?.trim();
@@ -211,7 +274,11 @@ export async function GET(request: Request) {
 
   if (googleApiKey && (placeId || placeResourceName)) {
     const resourceName = placeResourceName || `places/${placeId}`;
-    const response = await fetch(`https://places.googleapis.com/v1/${resourceName}`, {
+    const detailsUrl = new URL(`https://places.googleapis.com/v1/${resourceName}`);
+    detailsUrl.searchParams.set("languageCode", "nl");
+    detailsUrl.searchParams.set("regionCode", "BE");
+
+    const response = await fetch(detailsUrl, {
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": googleApiKey,
@@ -226,6 +293,14 @@ export async function GET(request: Request) {
 
       if (hasAnyHours(parseGoogleHours(data)) || !textQuery) {
         return Response.json(buildGooglePlaceDetailsResponse(data, placeId));
+      }
+    }
+
+    if (placeId) {
+      const legacyPlace = await fetchLegacyGoogleDetails(googleApiKey, placeId);
+
+      if (legacyPlace && hasAnyHours(buildLegacyGooglePlaceDetailsResponse(legacyPlace, placeId).hours)) {
+        return Response.json(buildLegacyGooglePlaceDetailsResponse(legacyPlace, placeId));
       }
     }
   }
@@ -261,6 +336,14 @@ export async function GET(request: Request) {
       const bestPlace = places.find((place) => hasAnyHours(parseGoogleHours(place))) ?? places[0];
 
       if (bestPlace) {
+        if (!hasAnyHours(parseGoogleHours(bestPlace)) && bestPlace.id) {
+          const legacyPlace = await fetchLegacyGoogleDetails(googleApiKey, bestPlace.id);
+
+          if (legacyPlace && hasAnyHours(buildLegacyGooglePlaceDetailsResponse(legacyPlace, bestPlace.id).hours)) {
+            return Response.json(buildLegacyGooglePlaceDetailsResponse(legacyPlace, bestPlace.id, "google-text-search-legacy"));
+          }
+        }
+
         return Response.json(buildGooglePlaceDetailsResponse(bestPlace, placeId, "google-text-search"));
       }
     }

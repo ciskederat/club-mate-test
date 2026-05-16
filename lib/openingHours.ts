@@ -43,6 +43,80 @@ const dayCodeToIndex: Record<(typeof orderedDayCodes)[number], number> = {
 
 const createEmptyParsedHours = () => Array.from({ length: 7 }, () => [] as OpeningInterval[]);
 
+const toMinutes = (value: string) => {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+};
+
+const fromMinutes = (value: number) => {
+  const normalizedValue = ((value % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalizedValue / 60);
+  const minutes = normalizedValue % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
+const normalizeTimeValue = (value: string) => {
+  const normalizedValue = value
+    .replace(/\./g, ":")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  const match = normalizedValue.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+
+  if (!match) {
+    return null;
+  }
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] ?? 0);
+  const meridiem = match[3];
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || minutes < 0 || minutes > 59) {
+    return null;
+  }
+
+  if (meridiem === "pm" && hours < 12) {
+    hours += 12;
+  }
+
+  if (meridiem === "am" && hours === 12) {
+    hours = 0;
+  }
+
+  if (hours < 0 || hours > 23) {
+    return null;
+  }
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
+const parseLooseTimeIntervals = (value: string) => {
+  const normalizedValue = value
+    .replace(/\u202f/g, " ")
+    .replace(/\u2009/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalizedValue
+    .split(",")
+    .map((part) => part.trim())
+    .map((part) => {
+      const intervalMatch = part.match(/^(\d{1,2}(?::|\.)?\d{0,2}\s*(?:AM|PM|am|pm)?)\s*-\s*(\d{1,2}(?::|\.)?\d{0,2}\s*(?:AM|PM|am|pm)?)$/);
+
+      if (!intervalMatch) {
+        return null;
+      }
+
+      const open = normalizeTimeValue(intervalMatch[1]);
+      const close = normalizeTimeValue(intervalMatch[2]);
+
+      return open && close ? { open, close } : null;
+    })
+    .filter((interval): interval is OpeningInterval => Boolean(interval));
+};
+
 type GoogleOpeningHoursPoint = {
   day?: number;
   hour?: number;
@@ -127,14 +201,7 @@ export const parseOpeningHoursText = (value?: string | null) => {
       continue;
     }
 
-    const intervals = timeValue
-      .split(",")
-      .map((part) => part.trim())
-      .map((part) => {
-        const intervalMatch = part.match(/^(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/);
-        return intervalMatch ? { open: intervalMatch[1], close: intervalMatch[2] } : null;
-      })
-      .filter((interval): interval is OpeningInterval => Boolean(interval));
+    const intervals = parseLooseTimeIntervals(timeValue);
 
     if (intervals.length === 0) {
       continue;
@@ -180,6 +247,7 @@ export const parseGoogleOpeningHours = (
     const openDay = period.open?.day;
     const openTime = formatGoogleTime(period.open);
     const closeTime = formatGoogleTime(period.close);
+    const closeDay = period.close?.day;
 
     if (typeof openDay !== "number" || !openTime) {
       continue;
@@ -191,6 +259,18 @@ export const parseGoogleOpeningHours = (
     }
 
     if (!closeTime) {
+      continue;
+    }
+
+    if (typeof closeDay === "number" && closeDay !== openDay) {
+      parsedHours[openDay] = [
+        ...parsedHours[openDay],
+        { open: openTime, close: "23:59" },
+      ];
+      parsedHours[closeDay] = [
+        ...parsedHours[closeDay],
+        { open: "00:00", close: closeTime },
+      ];
       continue;
     }
 
@@ -246,25 +326,22 @@ export const parseWeekdayDescriptions = (weekdayDescriptions?: string[] | null) 
       continue;
     }
 
-    const intervals = normalizedHoursValue
-      .split(",")
-      .map((part) => part.trim())
-      .map((part) => {
-        const intervalMatch = part.match(/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
-
-        if (!intervalMatch) {
-          return null;
-        }
-
-        return {
-          open: intervalMatch[1].padStart(5, "0"),
-          close: intervalMatch[2].padStart(5, "0"),
-        };
-      })
-      .filter((interval): interval is OpeningInterval => Boolean(interval));
+    const intervals = parseLooseTimeIntervals(normalizedHoursValue);
 
     if (intervals.length > 0) {
-      parsedHours[dayIndex] = intervals;
+      parsedHours[dayIndex] = intervals.flatMap((interval) => {
+        if (toMinutes(interval.close) >= toMinutes(interval.open)) {
+          return [interval];
+        }
+
+        const nextDayIndex = (dayIndex + 1) % 7;
+        parsedHours[nextDayIndex] = [
+          ...parsedHours[nextDayIndex],
+          { open: "00:00", close: interval.close },
+        ];
+
+        return [{ open: interval.open, close: fromMinutes(1439) }];
+      });
     }
   }
 
