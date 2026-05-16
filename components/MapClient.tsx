@@ -48,11 +48,12 @@ const icon = new L.Icon({
   className: "place-marker",
 });
 
-const userIcon = new L.Icon({
-  iconUrl: "/mijn-pin.png",
-  iconSize: [14, 36],
-  iconAnchor: [7, 36],
-  className: "user-marker",
+const userIcon = L.divIcon({
+  className: "user-location-marker",
+  html: "<span aria-hidden=\"true\"></span>",
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+  popupAnchor: [0, -9],
 });
 
 const mapTilerAquarelleUrl =
@@ -310,6 +311,17 @@ const parseTime = (time: string) => {
   return hours * 60 + minutes;
 };
 
+const getDisplayCloseTime = (hours: Place["hours"], dayIndex: number, interval: OpeningInterval) => {
+  if (interval.close !== "23:59") {
+    return interval.close;
+  }
+
+  const nextDayIndex = (dayIndex + 1) % 7;
+  const nextMorningInterval = hours?.[nextDayIndex]?.find((nextInterval) => nextInterval.open === "00:00");
+
+  return nextMorningInterval?.close ?? interval.close;
+};
+
 const getBrusselsTimeParts = (date: Date) => {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: placeTimeZone,
@@ -351,7 +363,7 @@ const getOpenStatus = (place: Place, now: Date): OpenStatus => {
   if (previousOvernight) {
     return {
       isOpen: true,
-      label: `Open tot ${previousOvernight.close}`,
+      label: `Open tot ${getDisplayCloseTime(place.hours, previousDayIndex, previousOvernight)}`,
     };
   }
 
@@ -364,7 +376,7 @@ const getOpenStatus = (place: Place, now: Date): OpenStatus => {
   if (currentInterval) {
     return {
       isOpen: true,
-      label: `Open tot ${currentInterval.close}`,
+      label: `Open tot ${getDisplayCloseTime(place.hours, dayIndex, currentInterval)}`,
     };
   }
 
@@ -787,9 +799,12 @@ function ClusteredPlaceMarkers({
 
   useEffect(() => {
     const clusterGroup = L.markerClusterGroup({
+      animate: false,
+      animateAddingMarkers: false,
       chunkedLoading: true,
       disableClusteringAtZoom: 18,
       maxClusterRadius: 42,
+      removeOutsideVisibleBounds: false,
       showCoverageOnHover: false,
       spiderfyOnEveryZoom: false,
       spiderfyOnMaxZoom: false,
