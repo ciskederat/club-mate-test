@@ -15,6 +15,7 @@ export type Place = {
   hours?: OpeningInterval[][];
   presentCount?: number;
   absentCount?: number;
+  consecutiveAbsentCount?: number;
   lastReportStatus?: MateReportStatus;
   lastReportedAt?: string;
 };

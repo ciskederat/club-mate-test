@@ -12,6 +12,7 @@ type PlaceRow = {
   hours: OpeningInterval[][] | null;
   present_count: number | null;
   absent_count: number | null;
+  consecutive_absent_count: number | null;
   last_report_status: MateReportStatus | null;
   last_reported_at: string | null;
 };
@@ -52,6 +53,7 @@ const mapRowToPlace = (row: PlaceRow): Place => ({
   hours: Array.isArray(row.hours) ? row.hours : [],
   presentCount: Math.max(0, Number(row.present_count ?? 0)),
   absentCount: Math.max(0, Number(row.absent_count ?? 0)),
+  consecutiveAbsentCount: Math.max(0, Number(row.consecutive_absent_count ?? 0)),
   lastReportStatus: row.last_report_status ?? undefined,
   lastReportedAt: row.last_reported_at ?? undefined,
 });
@@ -66,6 +68,7 @@ const mapPlaceToRow = (place: Place) => ({
   hours: place.hours ?? [],
   present_count: Math.max(0, Number(place.presentCount ?? 0)),
   absent_count: Math.max(0, Number(place.absentCount ?? 0)),
+  consecutive_absent_count: Math.max(0, Number(place.consecutiveAbsentCount ?? 0)),
   last_report_status: place.lastReportStatus ?? null,
   last_reported_at: place.lastReportedAt ?? null,
 });
@@ -156,11 +159,29 @@ export const deletePlace = async (place: Place) => {
 
 export const reportMateStatus = async (place: Place, status: MateReportStatus) => {
   const now = new Date().toISOString();
-  const presentCount = Math.max(0, Number(place.presentCount ?? 0)) + (status === "present" ? 1 : 0);
-  const absentCount = Math.max(0, Number(place.absentCount ?? 0)) + (status === "absent" ? 1 : 0);
   const selector = place.id
     ? `id=eq.${encodeURIComponent(place.id)}`
     : `name=eq.${encodeURIComponent(place.name)}`;
+  const existingRows = await requestSupabase(`?${selector}&select=*`) as PlaceRow[];
+  if (existingRows.length === 0) {
+    throw new Error("PLACE_NOT_FOUND");
+  }
+
+  const existingPlace = mapRowToPlace(existingRows[0]);
+  const presentCount = Math.max(0, Number(existingPlace.presentCount ?? 0)) + (status === "present" ? 1 : 0);
+  const absentCount = Math.max(0, Number(existingPlace.absentCount ?? 0)) + (status === "absent" ? 1 : 0);
+  const consecutiveAbsentCount =
+    status === "absent"
+      ? Math.max(0, Number(existingPlace.consecutiveAbsentCount ?? 0)) + 1
+      : 0;
+
+  if (status === "absent" && consecutiveAbsentCount >= 5) {
+    await requestSupabase(`?${selector}`, {
+      method: "DELETE",
+    });
+
+    return { deleted: true, place: existingPlace };
+  }
 
   const rows = await requestSupabase(`?${selector}&select=*`, {
     method: "PATCH",
@@ -170,12 +191,13 @@ export const reportMateStatus = async (place: Place, status: MateReportStatus) =
     body: JSON.stringify({
       present_count: presentCount,
       absent_count: absentCount,
+      consecutive_absent_count: consecutiveAbsentCount,
       last_report_status: status,
       last_reported_at: now,
     }),
   }) as PlaceRow[];
 
-  return mapRowToPlace(rows[0]);
+  return { deleted: false, place: mapRowToPlace(rows[0]) };
 };
 
 export const updateReportCounts = async (place: Place, presentCount: number, absentCount: number) => {

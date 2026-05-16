@@ -11,6 +11,7 @@ create table if not exists places (
   hours jsonb not null default '[]',
   present_count integer not null default 0,
   absent_count integer not null default 0,
+  consecutive_absent_count integer not null default 0,
   last_report_status text check (last_report_status in ('present', 'absent')),
   last_reported_at timestamptz,
   created_at timestamptz not null default now(),
@@ -19,6 +20,10 @@ create table if not exists places (
 
 alter table places drop constraint if exists places_type_check;
 alter table places add constraint places_type_check check (type in ('cafe', 'coffee_bar', 'restaurant', 'lunchbar', 'shop', 'other'));
+alter table places add column if not exists consecutive_absent_count integer not null default 0;
+update places
+set consecutive_absent_count = case when last_report_status = 'absent' then least(absent_count, 4) else 0 end
+where consecutive_absent_count is null or consecutive_absent_count = 0;
 
 create unique index if not exists places_name_unique on places (name);
 

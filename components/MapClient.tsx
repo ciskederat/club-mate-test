@@ -157,6 +157,7 @@ type MateReport = {
   lastReportedAt?: string;
   presentCount: number;
   absentCount: number;
+  consecutiveAbsentCount: number;
 };
 
 type MateReports = Record<string, MateReport>;
@@ -174,7 +175,7 @@ type DirectionsTarget = {
 
 type SuggestionDetails = {
   hours?: OpeningInterval[][];
-  rawOpeningHours?: string | null;
+  rawOpeningHours?: unknown;
   address?: string | null;
   name?: string | null;
   website?: string | null;
@@ -439,6 +440,7 @@ const normalizeMateReport = (value: unknown): MateReport | undefined => {
         : undefined;
   const presentCount = normalizeReportCount(report.presentCount) + (oldStatus === "present" ? 1 : 0);
   const absentCount = normalizeReportCount(report.absentCount) + (oldStatus === "absent" ? 1 : 0);
+  const consecutiveAbsentCount = normalizeReportCount(report.consecutiveAbsentCount);
 
   if (!lastStatus && presentCount === 0 && absentCount === 0) {
     return undefined;
@@ -449,6 +451,7 @@ const normalizeMateReport = (value: unknown): MateReport | undefined => {
     lastReportedAt,
     presentCount,
     absentCount,
+    consecutiveAbsentCount,
   };
 };
 
@@ -459,6 +462,7 @@ const getMateReportFromPlace = (place?: Place | null): MateReport | undefined =>
 
   const presentCount = normalizeReportCount(place.presentCount);
   const absentCount = normalizeReportCount(place.absentCount);
+  const consecutiveAbsentCount = normalizeReportCount(place.consecutiveAbsentCount);
 
   if (!place.lastReportStatus && !place.lastReportedAt && presentCount === 0 && absentCount === 0) {
     return undefined;
@@ -469,6 +473,7 @@ const getMateReportFromPlace = (place?: Place | null): MateReport | undefined =>
     lastReportedAt: place.lastReportedAt,
     presentCount,
     absentCount,
+    consecutiveAbsentCount,
   };
 };
 
@@ -539,6 +544,7 @@ function PlaceDetails({
   const [hoursOpen, setHoursOpen] = useState(false);
   const formattedHours = formatHours(place.hours, todayIndex);
   const hasFixedHours = Boolean(place.hours?.some((dayHours) => dayHours.length > 0));
+  const wasLastReportedAbsent = mateReport?.lastStatus === "absent";
 
   return (
     <div className="space-y-3.5 text-slate-900 sm:space-y-4">
@@ -560,6 +566,17 @@ function PlaceDetails({
       </div>
 
       <OpenBadge status={status} />
+
+      {wasLastReportedAbsent && (
+        <div className="rounded-2xl border border-rose-300/75 bg-rose-50/90 px-3.5 py-3 text-sm font-medium text-rose-900 shadow-[0_14px_32px_rgba(190,18,60,0.14)]">
+          Laatste melding: mogelijk geen Club Mate meer aanwezig.
+          {(mateReport?.consecutiveAbsentCount ?? 0) > 1 && (
+            <span className="block text-xs font-semibold text-rose-700">
+              {mateReport?.consecutiveAbsentCount} keer na elkaar afwezig gemeld.
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="retro-soft-card space-y-1 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
         <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Adres</div>
@@ -844,7 +861,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [focusTarget, setFocusTarget] = useState<[number, number] | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [pendingMateReport, setPendingMateReport] = useState<PendingMateReport | null>(null);
-  const [localMateReports, setLocalMateReports] = useState<MateReports>(() => {
+  const [localMateReports] = useState<MateReports>(() => {
     if (typeof window === "undefined") {
       return {};
     }
@@ -1206,8 +1223,12 @@ export default function MapClient({ places }: { places: Place[] }) {
     setSpotFormOpen(true);
   };
 
-  const fetchSuggestionDetails = async (placeId?: string, placeResourceName?: string): Promise<SuggestionDetails | null> => {
-    if (!placeId && !placeResourceName) {
+  const fetchSuggestionDetails = async (
+    placeId?: string,
+    placeResourceName?: string,
+    query?: string,
+  ): Promise<SuggestionDetails | null> => {
+    if (!placeId && !placeResourceName && !query) {
       return null;
     }
 
@@ -1219,6 +1240,10 @@ export default function MapClient({ places }: { places: Place[] }) {
 
     if (placeResourceName) {
       params.set("place", placeResourceName);
+    }
+
+    if (query) {
+      params.set("q", query);
     }
 
     const response = await fetch(`/api/geocode/place-details?${params.toString()}`);
@@ -1249,7 +1274,11 @@ export default function MapClient({ places }: { places: Place[] }) {
   };
 
   const selectAddressSuggestion = async (suggestion: PlaceSuggestion) => {
-    const details = await fetchSuggestionDetails(suggestion.placeId, suggestion.placeResourceName);
+    const details = await fetchSuggestionDetails(
+      suggestion.placeId,
+      suggestion.placeResourceName,
+      `${suggestion.name} ${suggestion.label}`,
+    );
     const latitude = details?.latitude ?? suggestion.latitude;
     const longitude = details?.longitude ?? suggestion.longitude;
 
@@ -1397,6 +1426,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       hours: parsedHours,
       presentCount: editingPlace?.presentCount ?? 0,
       absentCount: editingPlace?.absentCount ?? 0,
+      consecutiveAbsentCount: editingPlace?.consecutiveAbsentCount ?? 0,
       lastReportStatus: editingPlace?.lastReportStatus,
       lastReportedAt: editingPlace?.lastReportedAt,
     };
@@ -1499,7 +1529,11 @@ export default function MapClient({ places }: { places: Place[] }) {
   };
 
   const selectSpotSuggestion = async (suggestion: PlaceSuggestion) => {
-    const details = await fetchSuggestionDetails(suggestion.placeId, suggestion.placeResourceName);
+    const details = await fetchSuggestionDetails(
+      suggestion.placeId,
+      suggestion.placeResourceName,
+      `${suggestion.name} ${suggestion.label}`,
+    );
     const latitude = details?.latitude ?? suggestion.latitude;
     const longitude = details?.longitude ?? suggestion.longitude;
 
@@ -1578,26 +1612,6 @@ export default function MapClient({ places }: { places: Place[] }) {
     }
   };
 
-  const updateLocalMateReport = (placeName: string, updater: (report: MateReport) => MateReport) => {
-    const placeKey = normalizeType(placeName);
-    const existingReport = normalizeMateReport(localMateReports[placeKey]) ?? {
-      presentCount: 0,
-      absentCount: 0,
-    };
-    const nextReports = {
-      ...localMateReports,
-      [placeKey]: updater(existingReport),
-    };
-
-    setLocalMateReports(nextReports);
-
-    try {
-      window.localStorage.setItem(mateReportsStorageKey, JSON.stringify(nextReports));
-    } catch {
-      // The UI should still update even when storage is blocked.
-    }
-  };
-
   const getMateReport = (placeName: string) => {
     const place = safePlaces.find((candidatePlace) => normalizeType(candidatePlace.name) === normalizeType(placeName));
     return getMateReportFromPlace(place) ?? localMateReports[normalizeType(placeName)];
@@ -1607,7 +1621,7 @@ export default function MapClient({ places }: { places: Place[] }) {
     const place = safePlaces.find((candidatePlace) => normalizeType(candidatePlace.name) === normalizeType(placeName));
 
     if (!place) {
-      return;
+      return false;
     }
 
     try {
@@ -1620,19 +1634,25 @@ export default function MapClient({ places }: { places: Place[] }) {
       });
       const data = await response.json().catch(() => null);
 
-      if (!response.ok || !data?.place) {
-        throw new Error("REPORT_FAILED");
+      if (!response.ok || (!data?.place && !data?.deleted)) {
+        toast.error(data?.error ?? "Melding opslaan is mislukt.");
+        return false;
+      }
+
+      if (data.deleted) {
+        removePlaceFromState(place);
+        setSelectedPlaceName((currentName) =>
+          normalizeType(currentName) === normalizeType(place.name) ? null : currentName,
+        );
+        toast.error(`${place.name} is verwijderd na 5 afwezig-meldingen op rij.`);
+        return true;
       }
 
       updatePlaceInState(data.place, place.name);
+      return true;
     } catch {
-      updateLocalMateReport(placeName, (existingReport) => ({
-        ...existingReport,
-        lastStatus: status,
-        lastReportedAt: new Date().toISOString(),
-        presentCount: existingReport.presentCount + (status === "present" ? 1 : 0),
-        absentCount: existingReport.absentCount + (status === "absent" ? 1 : 0),
-      }));
+      toast.error("Melding kon niet worden opgeslagen. Controleer de verbinding of database.");
+      return false;
     }
   };
 
@@ -1681,15 +1701,20 @@ export default function MapClient({ places }: { places: Place[] }) {
       return;
     }
 
-    await reportMateStatus(pendingMateReport.placeName, pendingMateReport.status);
+    const didSaveReport = await reportMateStatus(pendingMateReport.placeName, pendingMateReport.status);
     setPendingMateReport(null);
-    toast.success("Melding doorgegeven.");
+
+    if (didSaveReport) {
+      toast.success("Melding doorgegeven.");
+    }
   };
 
   const openDirections = (target: DirectionsTarget) => {
     window.open(getAutomaticDirectionsUrl(target), "_blank", "noreferrer");
   };
 
+  const selectedMateReport = selectedPlace ? getMateReport(selectedPlace.name) : undefined;
+  const selectedPlaceWasLastReportedAbsent = selectedMateReport?.lastStatus === "absent";
   const showFloatingUi = !adminPanelOpen && !spotFormOpen && !infoPanelOpen;
 
   return (
@@ -2562,7 +2587,11 @@ export default function MapClient({ places }: { places: Place[] }) {
           transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
         >
           <motion.div
-            className="smooth-scroll-panel retro-info-panel max-h-[calc(100svh-1.5rem)] w-full max-w-md overflow-auto rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/84 p-3.5 shadow-[0_28px_80px_rgba(52,38,31,0.3)] backdrop-blur-xl sm:max-h-[78svh] sm:p-5"
+            className={`smooth-scroll-panel retro-info-panel max-h-[calc(100svh-1.5rem)] w-full max-w-md overflow-auto rounded-[1.75rem] border p-3.5 backdrop-blur-xl sm:max-h-[78svh] sm:p-5 ${
+              selectedPlaceWasLastReportedAbsent
+                ? "border-rose-300/85 bg-rose-50/88 shadow-[0_0_0_1px_rgba(244,63,94,0.22),0_28px_90px_rgba(190,18,60,0.28)]"
+                : "border-white/55 bg-[#fff7e8]/84 shadow-[0_28px_80px_rgba(52,38,31,0.3)]"
+            }`}
             onClick={(event) => event.stopPropagation()}
             initial={{ opacity: 0, y: 22, scale: 0.985 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -2574,7 +2603,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               place={selectedPlace}
               status={placeStatuses.get(selectedPlace.name) ?? getOpenStatus(selectedPlace, now)}
               distance={selectedPlaceDistance}
-              mateReport={getMateReport(selectedPlace.name)}
+              mateReport={selectedMateReport}
               onMateReport={(placeName, status) => setPendingMateReport({ placeName, status })}
               onOpenDirections={openDirections}
               onClose={() => setSelectedPlaceName(null)}

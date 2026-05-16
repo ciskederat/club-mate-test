@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       hours: body.hours?.length ? body.hours : existingPlace?.hours ?? [],
       presentCount: existingPlace?.presentCount ?? 0,
       absentCount: existingPlace?.absentCount ?? 0,
+      consecutiveAbsentCount: existingPlace?.consecutiveAbsentCount ?? 0,
       lastReportStatus: existingPlace?.lastReportStatus,
       lastReportedAt: existingPlace?.lastReportedAt,
     },

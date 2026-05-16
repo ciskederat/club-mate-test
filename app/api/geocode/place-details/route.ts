@@ -3,10 +3,11 @@ import type { OpeningInterval } from "@/data/placeTypes";
 
 const getGoogleApiKey = () => process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY;
 
-const mapGoogleTypeToPlaceType = (primaryType?: string | null, googleMapsTypeLabel?: string | null) => {
+const mapGoogleTypeToPlaceType = (primaryType?: string | null, googleMapsTypeLabel?: string | null, types?: string[]) => {
   const normalizedPrimaryType = primaryType?.toLowerCase() ?? "";
   const normalizedTypeLabel = googleMapsTypeLabel?.toLowerCase() ?? "";
-  const combinedTypeText = `${normalizedPrimaryType} ${normalizedTypeLabel}`;
+  const normalizedTypes = Array.isArray(types) ? types.join(" ").toLowerCase() : "";
+  const combinedTypeText = `${normalizedPrimaryType} ${normalizedTypeLabel} ${normalizedTypes}`;
 
   if (!combinedTypeText.trim()) {
     return "other";
@@ -111,18 +112,98 @@ type GoogleOpeningHours = {
   weekdayDescriptions?: string[];
 };
 
+type GooglePlaceDetails = {
+  id?: string;
+  displayName?: {
+    text?: string;
+  };
+  formattedAddress?: string;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+  };
+  primaryType?: string;
+  types?: string[];
+  googleMapsTypeLabel?: {
+    text?: string;
+  };
+  regularOpeningHours?: GoogleOpeningHours;
+  currentOpeningHours?: GoogleOpeningHours;
+  regularSecondaryOpeningHours?: GoogleOpeningHours[];
+  currentSecondaryOpeningHours?: GoogleOpeningHours[];
+  websiteUri?: string;
+};
+
 const hasAnyHours = (hours: OpeningInterval[][]) => hours.some((dayHours) => dayHours.length > 0);
 
 const firstHoursWithData = (...hourSets: OpeningInterval[][][]) =>
   hourSets.find(hasAnyHours) ?? hourSets[0];
+
+const parseGoogleHours = (place?: GooglePlaceDetails | null) => {
+  const secondaryHours = [
+    ...(place?.regularSecondaryOpeningHours ?? []),
+    ...(place?.currentSecondaryOpeningHours ?? []),
+  ];
+
+  return firstHoursWithData(
+    parseGoogleOpeningHours(place?.regularOpeningHours),
+    parseGoogleOpeningHours(place?.currentOpeningHours),
+    ...secondaryHours.map((hours) => parseGoogleOpeningHours(hours)),
+    parseWeekdayDescriptions(place?.regularOpeningHours?.weekdayDescriptions),
+    parseWeekdayDescriptions(place?.currentOpeningHours?.weekdayDescriptions),
+    ...secondaryHours.map((hours) => parseWeekdayDescriptions(hours.weekdayDescriptions)),
+  );
+};
+
+const googlePlaceFieldMask = [
+  "id",
+  "displayName",
+  "formattedAddress",
+  "location",
+  "primaryType",
+  "types",
+  "googleMapsTypeLabel",
+  "regularOpeningHours",
+  "currentOpeningHours",
+  "regularSecondaryOpeningHours",
+  "currentSecondaryOpeningHours",
+  "websiteUri",
+].join(",");
+
+const buildGooglePlaceDetailsResponse = (
+  place: GooglePlaceDetails | null | undefined,
+  fallbackPlaceId?: string | null,
+  provider = "google",
+) => {
+  const parsedHours = parseGoogleHours(place);
+
+  return {
+    provider,
+    placeId: place?.id ?? fallbackPlaceId ?? null,
+    hours: parsedHours,
+    rawOpeningHours:
+      place?.regularOpeningHours
+      ?? place?.currentOpeningHours
+      ?? place?.regularSecondaryOpeningHours
+      ?? place?.currentSecondaryOpeningHours
+      ?? null,
+    address: place?.formattedAddress ?? null,
+    name: place?.displayName?.text ?? null,
+    website: place?.websiteUri ?? null,
+    latitude: place?.location?.latitude ?? null,
+    longitude: place?.location?.longitude ?? null,
+    type: mapGoogleTypeToPlaceType(place?.primaryType, place?.googleMapsTypeLabel?.text, place?.types),
+  };
+};
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const placeId = searchParams.get("id")?.trim();
   const placeResourceName = searchParams.get("place")?.trim();
   const sessionToken = searchParams.get("sessionToken")?.trim();
+  const textQuery = searchParams.get("q")?.trim();
 
-  if (!placeId && !placeResourceName) {
+  if (!placeId && !placeResourceName && !textQuery) {
     return Response.json({ error: "Place id ontbreekt." }, { status: 400 });
   }
 
@@ -134,60 +215,54 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": googleApiKey,
-        "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,googleMapsTypeLabel,regularOpeningHours.periods,regularOpeningHours.weekdayDescriptions,currentOpeningHours.periods,currentOpeningHours.weekdayDescriptions,regularSecondaryOpeningHours.periods,regularSecondaryOpeningHours.weekdayDescriptions,websiteUri",
+        "X-Goog-FieldMask": googlePlaceFieldMask,
         ...(sessionToken ? { "X-Goog-Session-Token": sessionToken } : {}),
       },
       cache: "no-store",
     }).catch(() => null);
 
     if (response?.ok) {
-      const data = await response.json().catch(() => null) as {
-        id?: string;
-        displayName?: {
-          text?: string;
-        };
-        formattedAddress?: string;
-        location?: {
-          latitude?: number;
-          longitude?: number;
-        };
-        primaryType?: string;
-        googleMapsTypeLabel?: {
-          text?: string;
-        };
-        regularOpeningHours?: GoogleOpeningHours;
-        currentOpeningHours?: GoogleOpeningHours;
-        regularSecondaryOpeningHours?: GoogleOpeningHours;
-        websiteUri?: string;
-      } | null;
+      const data = await response.json().catch(() => null) as GooglePlaceDetails | null;
 
-      const parsedHoursFromRegularPeriods = parseGoogleOpeningHours(data?.regularOpeningHours);
-      const parsedHoursFromCurrentPeriods = parseGoogleOpeningHours(data?.currentOpeningHours);
-      const parsedHoursFromSecondaryPeriods = parseGoogleOpeningHours(data?.regularSecondaryOpeningHours);
-      const parsedHoursFromRegularDescriptions = parseWeekdayDescriptions(data?.regularOpeningHours?.weekdayDescriptions);
-      const parsedHoursFromCurrentDescriptions = parseWeekdayDescriptions(data?.currentOpeningHours?.weekdayDescriptions);
-      const parsedHoursFromSecondaryDescriptions = parseWeekdayDescriptions(data?.regularSecondaryOpeningHours?.weekdayDescriptions);
-      const parsedHours = firstHoursWithData(
-        parsedHoursFromRegularPeriods,
-        parsedHoursFromCurrentPeriods,
-        parsedHoursFromSecondaryPeriods,
-        parsedHoursFromRegularDescriptions,
-        parsedHoursFromCurrentDescriptions,
-        parsedHoursFromSecondaryDescriptions,
-      );
+      if (hasAnyHours(parseGoogleHours(data)) || !textQuery) {
+        return Response.json(buildGooglePlaceDetailsResponse(data, placeId));
+      }
+    }
+  }
 
-      return Response.json({
-        provider: "google",
-        placeId: data?.id ?? placeId ?? null,
-        hours: parsedHours,
-        rawOpeningHours: data?.regularOpeningHours ?? data?.currentOpeningHours ?? data?.regularSecondaryOpeningHours ?? null,
-        address: data?.formattedAddress ?? null,
-        name: data?.displayName?.text ?? null,
-        website: data?.websiteUri ?? null,
-        latitude: data?.location?.latitude ?? null,
-        longitude: data?.location?.longitude ?? null,
-        type: mapGoogleTypeToPlaceType(data?.primaryType, data?.googleMapsTypeLabel?.text),
-      });
+  if (googleApiKey && textQuery) {
+    const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": googleApiKey,
+        "X-Goog-FieldMask": `places.${googlePlaceFieldMask.split(",").join(",places.")}`,
+      },
+      body: JSON.stringify({
+        textQuery,
+        languageCode: "nl",
+        regionCode: "BE",
+        locationBias: {
+          circle: {
+            center: {
+              latitude: 51.2194,
+              longitude: 4.4025,
+            },
+            radius: 25000,
+          },
+        },
+      }),
+      cache: "no-store",
+    }).catch(() => null);
+
+    if (response?.ok) {
+      const data = await response.json().catch(() => null) as { places?: GooglePlaceDetails[] } | null;
+      const places = Array.isArray(data?.places) ? data.places : [];
+      const bestPlace = places.find((place) => hasAnyHours(parseGoogleHours(place))) ?? places[0];
+
+      if (bestPlace) {
+        return Response.json(buildGooglePlaceDetailsResponse(bestPlace, placeId, "google-text-search"));
+      }
     }
   }
 
