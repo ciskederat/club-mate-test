@@ -179,14 +179,9 @@ textarea:focus {
 
 .place-marker,
 .user-marker {
-  filter: drop-shadow(0 8px 10px rgba(52, 38, 31, 0.22));
+  filter: drop-shadow(0 2px 2px rgba(52, 38, 31, 0.18));
   transform-origin: bottom center;
-  transition: filter 180ms ease;
-  will-change: transform;
-}
-
-.place-marker:hover {
-  filter: drop-shadow(0 12px 14px rgba(52, 38, 31, 0.28));
+  will-change: filter, transform;
 }
 
 .map-surface .marker-cluster {
@@ -206,9 +201,7 @@ textarea:focus {
   font-size: 13px;
   font-weight: 760;
   line-height: 34px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.38),
-    0 8px 18px rgba(52, 38, 31, 0.18);
+  box-shadow: none;
 }
 
 .map-surface .marker-cluster-small,

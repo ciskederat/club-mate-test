@@ -43,7 +43,6 @@ const bricolageGrotesque = Bricolage_Grotesque({
 
 const icon = new L.Icon({
   iconUrl: "/custom-pin.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [32, 32],
   iconAnchor: [16, 32],
   className: "place-marker",
@@ -51,7 +50,6 @@ const icon = new L.Icon({
 
 const userIcon = new L.Icon({
   iconUrl: "/mijn-pin.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [24, 24],
   iconAnchor: [12, 24],
   className: "user-marker",
@@ -1048,7 +1046,7 @@ export default function MapClient({ places }: { places: Place[] }) {
             setAddressSuggestionMessage(
               error?.message === "NO_JSON"
                 ? "Suggestie-route niet gevonden. Redeploy de laatste versie op Vercel."
-                : "Suggesties ophalen is mislukt. Controleer je Geoapify key en redeploy.",
+                : "Suggesties ophalen is mislukt. Controleer je Google Maps API key en redeploy.",
             );
           }
         })
