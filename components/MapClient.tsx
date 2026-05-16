@@ -750,29 +750,27 @@ function ClusteredPlaceMarkers({
   useEffect(() => {
     const clusterGroup = L.markerClusterGroup({
       chunkedLoading: true,
-      disableClusteringAtZoom: 17,
+      disableClusteringAtZoom: 18,
       maxClusterRadius: 42,
       showCoverageOnHover: false,
-      spiderfyDistanceMultiplier: 1.35,
-      spiderfyOnMaxZoom: true,
+      spiderfyOnEveryZoom: false,
+      spiderfyOnMaxZoom: false,
       zoomToBoundsOnClick: false,
     });
 
     clusterGroup.on("clusterclick", (event) => {
       const cluster = event.layer as L.MarkerCluster;
       const bounds = cluster.getBounds();
-      const nextZoom = Math.min(
-        map.getBoundsZoom(bounds, false, L.point(72, 72)),
-        map.getZoom() + 1.5,
-        17,
-      );
+      const currentZoom = map.getZoom();
+      const boundsZoom = map.getBoundsZoom(bounds, false, L.point(96, 96));
+      const nextZoom = Math.min(Math.max(currentZoom + 1, boundsZoom), currentZoom + 1.25, 18);
 
       map.flyToBounds(bounds, {
         animate: true,
-        duration: 0.55,
+        duration: 0.65,
         easeLinearity: 0.18,
         maxZoom: nextZoom,
-        padding: [72, 72],
+        padding: [96, 96],
       });
     });
 
