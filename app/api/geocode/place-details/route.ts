@@ -20,27 +20,22 @@ const mapGoogleTypeToPlaceType = (
   }
 
   if (
-    combinedTypeText.includes("supermarket")
-    || combinedTypeText.includes("grocery_store")
-    || combinedTypeText.includes("convenience_store")
-    || combinedTypeText.includes("liquor_store")
-    || combinedTypeText.includes("food_store")
-    || combinedTypeText.includes("winkel")
-    || combinedTypeText.includes("supermarkt")
-  ) {
-    return "shop";
-  }
-
-  if (
     combinedTypeText.includes("coffee")
     || combinedTypeText.includes("caf")
     || combinedTypeText.includes("koffie")
+    || combinedTypeText.includes("espresso")
+    || combinedTypeText.includes("roastery")
   ) {
     return "coffee_bar";
   }
 
   if (
     combinedTypeText.includes("restaurant")
+    || combinedTypeText.includes("bistro")
+    || combinedTypeText.includes("brasserie")
+    || combinedTypeText.includes("eatery")
+    || combinedTypeText.includes("meal_takeaway")
+    || combinedTypeText.includes("meal_delivery")
   ) {
     return "restaurant";
   }
@@ -48,6 +43,9 @@ const mapGoogleTypeToPlaceType = (
   if (
     combinedTypeText.includes("lunch")
     || combinedTypeText.includes("sandwich")
+    || combinedTypeText.includes("broodjes")
+    || combinedTypeText.includes("bakery")
+    || combinedTypeText.includes("bakkerij")
   ) {
     return "lunchbar";
   }
@@ -59,6 +57,20 @@ const mapGoogleTypeToPlaceType = (
     || combinedTypeText.includes("drinking")
   ) {
     return "cafe";
+  }
+
+  if (
+    combinedTypeText.includes("supermarket")
+    || combinedTypeText.includes("grocery_store")
+    || combinedTypeText.includes("convenience_store")
+    || combinedTypeText.includes("liquor_store")
+    || combinedTypeText.includes("food_store")
+    || combinedTypeText.includes("grocery")
+    || combinedTypeText.includes("winkel")
+    || combinedTypeText.includes("supermarkt")
+    || combinedTypeText.includes("nachtwinkel")
+  ) {
+    return "shop";
   }
 
   return "other";
@@ -74,26 +86,22 @@ const inferPlaceTypeFromText = (value?: string | null) => {
   }
 
   if (
-    normalizedValue.includes("supermarkt")
-    || normalizedValue.includes("supermarket")
-    || normalizedValue.includes("grocery")
-    || normalizedValue.includes("shop")
-    || normalizedValue.includes("winkel")
-    || normalizedValue.includes("nachtwinkel")
-  ) {
-    return "shop";
-  }
-
-  if (
     normalizedValue.includes("koffie")
     || normalizedValue.includes("coffee")
     || normalizedValue.includes("café")
     || normalizedValue.includes("cafe")
+    || normalizedValue.includes("espresso")
+    || normalizedValue.includes("roastery")
   ) {
     return "coffee_bar";
   }
 
-  if (normalizedValue.includes("restaurant")) {
+  if (
+    normalizedValue.includes("restaurant")
+    || normalizedValue.includes("bistro")
+    || normalizedValue.includes("brasserie")
+    || normalizedValue.includes("eatery")
+  ) {
     return "restaurant";
   }
 
@@ -101,6 +109,8 @@ const inferPlaceTypeFromText = (value?: string | null) => {
     normalizedValue.includes("lunch")
     || normalizedValue.includes("sandwich")
     || normalizedValue.includes("broodjes")
+    || normalizedValue.includes("bakery")
+    || normalizedValue.includes("bakkerij")
   ) {
     return "lunchbar";
   }
@@ -111,6 +121,19 @@ const inferPlaceTypeFromText = (value?: string | null) => {
     || normalizedValue.includes("taverne")
   ) {
     return "cafe";
+  }
+
+  if (
+    normalizedValue.includes("supermarkt")
+    || normalizedValue.includes("supermarket")
+    || normalizedValue.includes("grocery")
+    || normalizedValue.includes("convenience")
+    || normalizedValue.includes("liquor")
+    || normalizedValue.includes("food store")
+    || normalizedValue.includes("winkel")
+    || normalizedValue.includes("nachtwinkel")
+  ) {
+    return "shop";
   }
 
   return "other";

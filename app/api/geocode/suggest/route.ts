@@ -4,26 +4,23 @@ const inferPlaceTypeFromText = (value?: string | null) => {
   const normalizedValue = value?.toLowerCase() ?? "";
 
   if (
-    normalizedValue.includes("supermarkt")
-    || normalizedValue.includes("supermarket")
-    || normalizedValue.includes("grocery")
-    || normalizedValue.includes("shop")
-    || normalizedValue.includes("winkel")
-    || normalizedValue.includes("nachtwinkel")
-  ) {
-    return "shop";
-  }
-
-  if (
     normalizedValue.includes("café")
     || normalizedValue.includes("cafe")
     || normalizedValue.includes("coffee")
     || normalizedValue.includes("koffie")
+    || normalizedValue.includes("espresso")
+    || normalizedValue.includes("roastery")
+    || normalizedValue.includes("koffiebar")
   ) {
     return "coffee_bar";
   }
 
-  if (normalizedValue.includes("restaurant")) {
+  if (
+    normalizedValue.includes("restaurant")
+    || normalizedValue.includes("bistro")
+    || normalizedValue.includes("brasserie")
+    || normalizedValue.includes("eatery")
+  ) {
     return "restaurant";
   }
 
@@ -31,6 +28,8 @@ const inferPlaceTypeFromText = (value?: string | null) => {
     normalizedValue.includes("lunch")
     || normalizedValue.includes("sandwich")
     || normalizedValue.includes("broodjes")
+    || normalizedValue.includes("bakery")
+    || normalizedValue.includes("bakkerij")
   ) {
     return "lunchbar";
   }
@@ -39,8 +38,22 @@ const inferPlaceTypeFromText = (value?: string | null) => {
     normalizedValue.includes("bar")
     || normalizedValue.includes("pub")
     || normalizedValue.includes("taverne")
+    || normalizedValue.includes("drinking")
   ) {
     return "cafe";
+  }
+
+  if (
+    normalizedValue.includes("supermarkt")
+    || normalizedValue.includes("supermarket")
+    || normalizedValue.includes("grocery")
+    || normalizedValue.includes("convenience")
+    || normalizedValue.includes("liquor")
+    || normalizedValue.includes("food store")
+    || normalizedValue.includes("winkel")
+    || normalizedValue.includes("nachtwinkel")
+  ) {
+    return "shop";
   }
 
   return "other";
@@ -51,20 +64,26 @@ const mapGoogleTypeToPlaceType = (types?: string[], text?: string | null) => {
     return inferPlaceTypeFromText(text);
   }
 
-  if (types.some((type) => type.includes("supermarket") || type.includes("grocery_store") || type.includes("convenience_store"))) {
-    return "shop";
-  }
+  const normalizedTypes = types.map((type) => type.toLowerCase());
 
-  if (types.some((type) => type.includes("coffee_shop") || type.includes("cafe"))) {
+  if (normalizedTypes.some((type) => type.includes("coffee_shop") || type.includes("cafe"))) {
     return "coffee_bar";
   }
 
-  if (types.some((type) => type.includes("restaurant"))) {
+  if (normalizedTypes.some((type) => type.includes("restaurant") || type.includes("meal_takeaway") || type.includes("meal_delivery"))) {
     return "restaurant";
   }
 
-  if (types.some((type) => type.includes("bar") || type.includes("night_club") || type.includes("pub"))) {
+  if (normalizedTypes.some((type) => type.includes("bakery"))) {
+    return "lunchbar";
+  }
+
+  if (normalizedTypes.some((type) => type.includes("bar") || type.includes("night_club") || type.includes("pub"))) {
     return "cafe";
+  }
+
+  if (normalizedTypes.some((type) => type.includes("supermarket") || type.includes("grocery_store") || type.includes("convenience_store") || type.includes("liquor_store") || type.includes("food_store"))) {
+    return "shop";
   }
 
   return inferPlaceTypeFromText(text);
