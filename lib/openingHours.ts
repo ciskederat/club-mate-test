@@ -23,13 +23,27 @@ const localizedDayToIndex: Record<string, number> = {
   vr: 5,
   za: 6,
   zo: 0,
+  "zo.": 0,
   mon: 1,
+  "mon.": 1,
   tue: 2,
+  "tue.": 2,
   wed: 3,
+  "wed.": 3,
   thu: 4,
+  "thu.": 4,
   fri: 5,
+  "fri.": 5,
   sat: 6,
+  "sat.": 6,
   sun: 0,
+  "sun.": 0,
+  "ma.": 1,
+  "di.": 2,
+  "wo.": 3,
+  "do.": 4,
+  "vr.": 5,
+  "za.": 6,
 };
 const dayCodeToIndex: Record<(typeof orderedDayCodes)[number], number> = {
   Mo: 1,
@@ -295,7 +309,9 @@ export const parseWeekdayDescriptions = (weekdayDescriptions?: string[] | null) 
       continue;
     }
 
-    const [rawDayLabel, rawHoursValue] = description.split(/:\s+/, 2);
+    const descriptionMatch = description.match(/^([^:]+):\s*(.+)$/);
+    const rawDayLabel = descriptionMatch?.[1];
+    const rawHoursValue = descriptionMatch?.[2];
 
     if (!rawDayLabel || !rawHoursValue) {
       continue;

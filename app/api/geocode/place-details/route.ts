@@ -156,6 +156,72 @@ const hasAnyHours = (hours: OpeningInterval[][]) => hours.some((dayHours) => day
 const firstHoursWithData = (...hourSets: OpeningInterval[][][]) =>
   hourSets.find(hasAnyHours) ?? hourSets[0];
 
+const collectGoogleOpeningHourObjects = (value: unknown, collectedHours: GoogleOpeningHours[] = []) => {
+  if (!value || typeof value !== "object") {
+    return collectedHours;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectGoogleOpeningHourObjects(item, collectedHours);
+    }
+
+    return collectedHours;
+  }
+
+  const candidate = value as GoogleOpeningHours & Record<string, unknown>;
+
+  if (Array.isArray(candidate.periods) || Array.isArray(candidate.weekdayDescriptions)) {
+    collectedHours.push(candidate);
+  }
+
+  for (const nestedValue of Object.values(candidate)) {
+    collectGoogleOpeningHourObjects(nestedValue, collectedHours);
+  }
+
+  return collectedHours;
+};
+
+const collectWeekdayDescriptionArrays = (value: unknown, collectedDescriptions: string[][] = []) => {
+  if (!value || typeof value !== "object") {
+    return collectedDescriptions;
+  }
+
+  if (Array.isArray(value)) {
+    if (
+      value.length > 0
+      && value.every((item) => typeof item === "string")
+      && value.some((item) => /maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon\.?|tue\.?|wed\.?|thu\.?|fri\.?|sat\.?|sun\.?/i.test(item))
+      && value.some((item) => /\d{1,2}(?::|\.)?\d{0,2}\s*(?:am|pm)?\s*[-–—]/i.test(item) || /24\s*(?:uur|hours)|24\/7/i.test(item))
+    ) {
+      collectedDescriptions.push(value as string[]);
+      return collectedDescriptions;
+    }
+
+    for (const item of value) {
+      collectWeekdayDescriptionArrays(item, collectedDescriptions);
+    }
+
+    return collectedDescriptions;
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    collectWeekdayDescriptionArrays(nestedValue, collectedDescriptions);
+  }
+
+  return collectedDescriptions;
+};
+
+const parseHoursFromUnknownGooglePayload = (value: unknown) => {
+  const objectHours = collectGoogleOpeningHourObjects(value).flatMap((hoursObject) => [
+    parseGoogleOpeningHours(hoursObject),
+    parseWeekdayDescriptions(hoursObject.weekdayDescriptions),
+  ]);
+  const descriptionHours = collectWeekdayDescriptionArrays(value).map(parseWeekdayDescriptions);
+
+  return firstHoursWithData(...objectHours, ...descriptionHours, Array.from({ length: 7 }, () => []));
+};
+
 const parseGoogleHours = (place?: GooglePlaceDetails | null) => {
   const secondaryHours = [
     ...(place?.regularSecondaryOpeningHours ?? []),
@@ -169,6 +235,7 @@ const parseGoogleHours = (place?: GooglePlaceDetails | null) => {
     parseWeekdayDescriptions(place?.regularOpeningHours?.weekdayDescriptions),
     parseWeekdayDescriptions(place?.currentOpeningHours?.weekdayDescriptions),
     ...secondaryHours.map((hours) => parseWeekdayDescriptions(hours.weekdayDescriptions)),
+    parseHoursFromUnknownGooglePayload(place),
   );
 };
 
@@ -222,6 +289,7 @@ const buildLegacyGooglePlaceDetailsResponse = (
     parseGoogleOpeningHours(place?.opening_hours),
     parseWeekdayDescriptions(place?.opening_hours?.weekdayDescriptions),
     parseWeekdayDescriptions(place?.opening_hours?.weekday_text),
+    parseHoursFromUnknownGooglePayload(place),
   );
 
   return {

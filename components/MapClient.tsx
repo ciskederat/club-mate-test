@@ -2522,9 +2522,45 @@ export default function MapClient({ places }: { places: Place[] }) {
                 )}
 
                 {spotForm.address && (
-                  <div className="rounded-3xl bg-slate-50 p-4 text-sm text-slate-700">
-                    <div className="font-medium text-slate-900">{spotForm.name}</div>
-                    <div className="mt-1">{spotForm.address}</div>
+                  <div className="space-y-3 rounded-3xl border border-[#9f4a3d]/15 bg-[#fff8e8]/68 p-4 text-sm text-slate-700">
+                    <div>
+                      <div className="font-semibold text-slate-900">{spotForm.name}</div>
+                      <div className="mt-1">{spotForm.address}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full border border-[#9f4a3d]/18 bg-[#e5bd48]/30 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.08em] text-[#26304a]">
+                        {typeLabel(spotForm.type)}
+                      </span>
+                      {spotForm.hours.some((dayHours) => dayHours.length > 0) ? (
+                        <span className="rounded-full border border-emerald-500/25 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                          Openingsuren gevonden
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-amber-500/25 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                          Geen vaste openingsuren gevonden
+                        </span>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border border-white/60 bg-white/55 p-3">
+                      <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Openingsuren</div>
+                      {spotForm.hours.some((dayHours) => dayHours.length > 0) ? (
+                        <div className="mt-2 grid gap-1.5">
+                          {formatHours(spotForm.hours, todayIndex).map((day) => (
+                            <div
+                              key={day.key}
+                              className={`grid grid-cols-[3.75rem_1fr] gap-2 rounded-xl px-2 py-1.5 text-xs ${day.isToday ? "bg-[#e5bd48]/25 text-[#26304a]" : "text-slate-600"}`}
+                            >
+                              <span className="font-semibold capitalize">{day.shortDay}</span>
+                              <span>{day.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-xs text-slate-500">
+                          Google gaf voor deze plek geen bruikbare vaste openingsuren terug.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
