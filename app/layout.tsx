@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, DM_Serif_Display } from "next/font/google";
+import { Bricolage_Grotesque, DM_Serif_Display, Geist } from "next/font/google";
 import "./globals.css";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 const bricolageGrotesque = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -33,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="nl" className={`${bricolageGrotesque.variable} ${dmSerifDisplay.variable} h-full antialiased`}>
+    <html lang="nl" className={cn("h-full", "antialiased", bricolageGrotesque.variable, dmSerifDisplay.variable, "font-sans", geist.variable)}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

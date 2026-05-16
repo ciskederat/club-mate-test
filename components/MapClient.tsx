@@ -3,10 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import Image from "next/image";
+import { Info, Settings, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
+import { Toaster, toast } from "sonner";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
 import type { MateReportStatus, OpeningInterval, Place } from "@/data/placeTypes";
+import { Button } from "@/components/ui/button";
+import { LoaderTwo } from "@/components/ui/loader";
+import { ShineBorder } from "@/components/ui/shine-border";
 
 type AdminPlaceForm = {
   name: string;
@@ -545,7 +554,7 @@ function PlaceDetails({
             onClick={onClose}
             aria-label="Sluit infovenster"
           >
-            ×
+            <X className="h-4 w-4" aria-hidden="true" strokeWidth={2.3} />
           </button>
         )}
       </div>
@@ -709,6 +718,50 @@ function MapInteractionController({
       onMapClick();
     },
   });
+
+  return null;
+}
+
+function ClusteredPlaceMarkers({
+  places,
+  onPlaceClick,
+}: {
+  places: Place[];
+  onPlaceClick: (placeName: string) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const clusterGroup = L.markerClusterGroup({
+      chunkedLoading: true,
+      disableClusteringAtZoom: 18,
+      maxClusterRadius: 42,
+      showCoverageOnHover: false,
+      spiderfyDistanceMultiplier: 1.35,
+      spiderfyOnMaxZoom: true,
+      zoomToBoundsOnClick: true,
+    });
+
+    for (const place of places) {
+      const marker = L.marker(place.position, {
+        icon,
+        title: place.name,
+      });
+
+      marker.on("click", () => {
+        onPlaceClick(place.name);
+      });
+
+      clusterGroup.addLayer(marker);
+    }
+
+    map.addLayer(clusterGroup);
+
+    return () => {
+      clusterGroup.clearLayers();
+      map.removeLayer(clusterGroup);
+    };
+  }, [map, onPlaceClick, places]);
 
   return null;
 }
@@ -1112,7 +1165,9 @@ export default function MapClient({ places }: { places: Place[] }) {
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setAdminError(data?.error ?? "Code klopt niet.");
+        const message = data?.error ?? "Code klopt niet.";
+        setAdminError(message);
+        toast.error(message);
         return;
       }
 
@@ -1122,8 +1177,11 @@ export default function MapClient({ places }: { places: Place[] }) {
       setAdminPasscodeInput("");
       window.sessionStorage.setItem(adminSessionStorageKey, "true");
       window.sessionStorage.setItem(adminSessionPasscodeKey, pin);
+      toast.success("Beheer ontgrendeld.");
     } catch {
-      setAdminError("Beheer ontgrendelen is mislukt.");
+      const message = "Beheer ontgrendelen is mislukt.";
+      setAdminError(message);
+      toast.error(message);
     }
   };
 
@@ -1196,7 +1254,9 @@ export default function MapClient({ places }: { places: Place[] }) {
     const longitude = details?.longitude ?? suggestion.longitude;
 
     if (latitude == null || longitude == null) {
-      setAdminError("Locatiegegevens ontbreken voor deze suggestie.");
+      const message = "Locatiegegevens ontbreken voor deze suggestie.";
+      setAdminError(message);
+      toast.error(message);
       return;
     }
 
@@ -1213,6 +1273,7 @@ export default function MapClient({ places }: { places: Place[] }) {
     setAddressSuggestionMessage(null);
     setAddressSuggestionSelected(true);
     setAdminError("Adres gekozen.");
+    toast.success("Adres gekozen.");
     setViewMode("map");
   };
 
@@ -1306,17 +1367,23 @@ export default function MapClient({ places }: { places: Place[] }) {
     const editingPlace = safePlaces.find((place) => normalizeType(place.name) === normalizeType(editingPlaceName));
 
     if (!adminForm.name.trim()) {
-      setAdminError("Naam is verplicht.");
+      const message = "Naam is verplicht.";
+      setAdminError(message);
+      toast.error(message);
       return;
     }
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      setAdminError("Latitude en longitude moeten geldige nummers zijn.");
+      const message = "Latitude en longitude moeten geldige nummers zijn.";
+      setAdminError(message);
+      toast.error(message);
       return;
     }
 
     if (!parsedHours) {
-      setAdminError("Gebruik openingsuren zoals 12:00-18:00, of laat leeg voor gesloten.");
+      const message = "Gebruik openingsuren zoals 12:00-18:00, of laat leeg voor gesloten.";
+      setAdminError(message);
+      toast.error(message);
       return;
     }
 
@@ -1354,7 +1421,9 @@ export default function MapClient({ places }: { places: Place[] }) {
       }
 
       if (!response.ok || !data?.place) {
-        setAdminError(data?.error ?? "Locatie opslaan is mislukt.");
+        const message = data?.error ?? "Locatie opslaan is mislukt.";
+        setAdminError(message);
+        toast.error(message);
         return;
       }
 
@@ -1364,8 +1433,11 @@ export default function MapClient({ places }: { places: Place[] }) {
       setAdminForm(createAdminFormFromPlace(data.place));
       setAdminError("Locatie opgeslagen.");
       setAdminPanelOpen(false);
+      toast.success("Locatie opgeslagen.");
     } catch {
-      setAdminError("Locatie opslaan is mislukt.");
+      const message = "Locatie opslaan is mislukt.";
+      setAdminError(message);
+      toast.error(message);
     }
   };
 
@@ -1373,7 +1445,9 @@ export default function MapClient({ places }: { places: Place[] }) {
     const editingPlace = safePlaces.find((place) => normalizeType(place.name) === normalizeType(editingPlaceName));
 
     if (!editingPlace) {
-      setAdminError("Kies eerst een locatie om te verwijderen.");
+      const message = "Kies eerst een locatie om te verwijderen.";
+      setAdminError(message);
+      toast.error(message);
       return;
     }
 
@@ -1400,7 +1474,9 @@ export default function MapClient({ places }: { places: Place[] }) {
       }
 
       if (!response.ok) {
-        setAdminError(data?.error ?? "Locatie verwijderen is mislukt.");
+        const message = data?.error ?? "Locatie verwijderen is mislukt.";
+        setAdminError(message);
+        toast.error(message);
         return;
       }
 
@@ -1414,8 +1490,11 @@ export default function MapClient({ places }: { places: Place[] }) {
       setAddressSuggestions([]);
       setAddressSuggestionMessage(null);
       setAdminError("Locatie verwijderd.");
+      toast.success("Locatie verwijderd.");
     } catch {
-      setAdminError("Locatie verwijderen is mislukt.");
+      const message = "Locatie verwijderen is mislukt.";
+      setAdminError(message);
+      toast.error(message);
     }
   };
 
@@ -1425,7 +1504,9 @@ export default function MapClient({ places }: { places: Place[] }) {
     const longitude = details?.longitude ?? suggestion.longitude;
 
     if (latitude == null || longitude == null) {
-      setSpotFormMessage("Locatiegegevens ontbreken voor deze suggestie.");
+      const message = "Locatiegegevens ontbreken voor deze suggestie.";
+      setSpotFormMessage(message);
+      toast.error(message);
       return;
     }
 
@@ -1443,13 +1524,16 @@ export default function MapClient({ places }: { places: Place[] }) {
     setSpotSuggestionMessage(null);
     setSpotSuggestionSelected(true);
     setSpotFormMessage("Locatie gekozen. Controleer gerust nog even op de kaart.");
+    toast.success("Locatie gekozen.");
     setSelectedPlaceName(null);
     setViewMode("map");
   };
 
   const submitSpotForm = async () => {
     if (!spotForm.name.trim() || spotForm.latitude == null || spotForm.longitude == null) {
-      setSpotFormMessage("Kies eerst een locatie uit de suggesties.");
+      const message = "Kies eerst een locatie uit de suggesties.";
+      setSpotFormMessage(message);
+      toast.error(message);
       return;
     }
 
@@ -1474,7 +1558,9 @@ export default function MapClient({ places }: { places: Place[] }) {
       const data = await response.json().catch(() => null);
 
       if (!response.ok || !data?.place) {
-        setSpotFormMessage(data?.error ?? "Locatie toevoegen is mislukt.");
+        const message = data?.error ?? "Locatie toevoegen is mislukt.";
+        setSpotFormMessage(message);
+        toast.error(message);
         return;
       }
 
@@ -1482,8 +1568,11 @@ export default function MapClient({ places }: { places: Place[] }) {
       setSelectedPlaceName(data.place.name);
       setFocusTarget(data.place.position);
       closeSpotForm();
+      toast.success("Spot doorgegeven.");
     } catch {
-      setSpotFormMessage("Locatie toevoegen is mislukt.");
+      const message = "Locatie toevoegen is mislukt.";
+      setSpotFormMessage(message);
+      toast.error(message);
     } finally {
       setIsSubmittingSpot(false);
     }
@@ -1571,14 +1660,19 @@ export default function MapClient({ places }: { places: Place[] }) {
       }
 
       if (!response.ok || !data?.place) {
-        setAdminError(data?.error ?? "Tellers aanpassen is mislukt.");
+        const message = data?.error ?? "Tellers aanpassen is mislukt.";
+        setAdminError(message);
+        toast.error(message);
         return;
       }
 
       updatePlaceInState(data.place, place.name);
       setAdminError("Tellers aangepast.");
+      toast.success("Tellers aangepast.");
     } catch {
-      setAdminError("Tellers aanpassen is mislukt.");
+      const message = "Tellers aanpassen is mislukt.";
+      setAdminError(message);
+      toast.error(message);
     }
   };
 
@@ -1589,6 +1683,7 @@ export default function MapClient({ places }: { places: Place[] }) {
 
     await reportMateStatus(pendingMateReport.placeName, pendingMateReport.status);
     setPendingMateReport(null);
+    toast.success("Melding doorgegeven.");
   };
 
   const openDirections = (target: DirectionsTarget) => {
@@ -1599,8 +1694,24 @@ export default function MapClient({ places }: { places: Place[] }) {
 
   return (
     <div className="relative h-svh w-screen overflow-hidden bg-slate-100">
-      {showFloatingUi && (
-        <div className="absolute left-2 top-[max(0.5rem,env(safe-area-inset-top))] z-[1000] flex max-w-[calc(100vw-1rem)] flex-col items-start gap-1.5 sm:left-4 sm:top-4 sm:flex-row sm:items-center sm:gap-0">
+      <Toaster
+        richColors
+        position="top-center"
+        toastOptions={{
+          className: "font-bricolage",
+          duration: 2400,
+        }}
+      />
+      <AnimatePresence initial={false}>
+        {showFloatingUi && (
+          <motion.div
+            key="toolbar"
+            className="absolute left-2 top-[max(0.5rem,env(safe-area-inset-top))] z-[1000] flex max-w-[calc(100vw-1rem)] flex-col items-start gap-1.5 sm:left-4 sm:top-4 sm:flex-row sm:items-center sm:gap-0"
+            initial={{ opacity: 0, y: -8, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.985 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          >
           <div className="flex items-center gap-1.5 rounded-[18px] border border-[#9f4a3d]/28 bg-[#efe0c6]/74 p-1.5 shadow-[0_12px_28px_rgba(52,38,31,0.12)] backdrop-blur-md sm:rounded-r-none sm:border-r-0 sm:p-2">
             <button
               type="button"
@@ -1630,7 +1741,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               aria-label="Beheer"
               title="Beheer"
             >
-              ⚙
+              <Settings className="h-4 w-4" aria-hidden="true" strokeWidth={2.2} />
             </button>
             <button
               type="button"
@@ -1644,7 +1755,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               aria-label="Info over deze website"
               title="Info"
             >
-              i
+              <Info className="h-4 w-4" aria-hidden="true" strokeWidth={2.2} />
             </button>
           </div>
           <div className="flex items-center gap-1.5 rounded-[18px] border border-[#9f4a3d]/28 bg-[#efe0c6]/74 p-1.5 shadow-[0_12px_28px_rgba(52,38,31,0.12)] backdrop-blur-md sm:rounded-l-none sm:border-l-0 sm:p-2">
@@ -1676,14 +1787,28 @@ export default function MapClient({ places }: { places: Place[] }) {
               Nu open
             </button>
           </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {adminPanelOpen && (
-        <div className="fixed inset-0 z-[1200] bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6" onClick={() => setAdminPanelOpen(false)}>
-          <div
+      <AnimatePresence initial={false}>
+        {adminPanelOpen && (
+        <motion.div
+          key="admin-panel"
+          className="fixed inset-0 z-[1200] bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6"
+          onClick={() => setAdminPanelOpen(false)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.div
             className="retro-modal mx-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/50 bg-white/90 shadow-[0_28px_80px_rgba(15,23,42,0.28)] backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 18, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 14, scale: 0.985 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           >
           <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6">
             <div>
@@ -1696,7 +1821,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               onClick={() => setAdminPanelOpen(false)}
               aria-label="Sluit beheer"
             >
-              ×
+              <X className="h-4 w-4" aria-hidden="true" strokeWidth={2.3} />
             </button>
           </div>
 
@@ -2034,9 +2159,10 @@ export default function MapClient({ places }: { places: Place[] }) {
               </form>
 	            </div>
 	          )}
-	        </div>
-        </div>
+	        </motion.div>
+        </motion.div>
 	      )}
+      </AnimatePresence>
 
       {viewMode === "map" ? (
         <MapContainer
@@ -2044,11 +2170,19 @@ export default function MapClient({ places }: { places: Place[] }) {
           zoom={13}
           className="map-surface h-full w-full"
           zoomControl={false}
+          zoomAnimation
+          fadeAnimation
+          markerZoomAnimation
+          inertia
+          inertiaDeceleration={2800}
+          inertiaMaxSpeed={1200}
           keyboard={false}
           boxZoom={false}
           doubleClickZoom
           touchZoom
           tapHold={false}
+          wheelDebounceTime={16}
+          wheelPxPerZoomLevel={72}
         >
         <MapViewportController focusTarget={focusTarget} />
         <MapInteractionController
@@ -2059,27 +2193,23 @@ export default function MapClient({ places }: { places: Place[] }) {
         <TileLayer
           attribution={mapTilerAttribution}
           url={mapTilerAquarelleUrl}
-          keepBuffer={2}
+          keepBuffer={4}
+          updateWhenIdle={false}
+          updateWhenZooming
+          updateInterval={120}
         />
         <TileLayer
           attribution={cartoLabelsAttribution}
           url={cartoLabelsOnlyUrl}
           opacity={0.94}
-          updateWhenZooming={false}
-          keepBuffer={1}
+          keepBuffer={3}
+          updateWhenIdle={false}
+          updateWhenZooming
+          updateInterval={120}
         />
         <ZoomControl position="bottomright" />
 
-        {visiblePlaces.map((place) => (
-          <Marker
-            key={place.name}
-            position={place.position}
-            icon={icon}
-            eventHandlers={{
-              click: () => setSelectedPlaceName(place.name),
-            }}
-          />
-        ))}
+        <ClusteredPlaceMarkers places={visiblePlaces} onPlaceClick={setSelectedPlaceName} />
 
         {userLocation && (
           <Marker position={userLocation} icon={userIcon} />
@@ -2087,7 +2217,7 @@ export default function MapClient({ places }: { places: Place[] }) {
 
       </MapContainer>
       ) : (
-        <div className="absolute inset-0 overflow-auto bg-[#f6efe2] p-3 pb-24 pt-28 sm:p-4 sm:pb-28 sm:pt-24">
+        <div className="smooth-scroll-panel absolute inset-0 overflow-auto bg-[#f6efe2] p-3 pb-24 pt-28 sm:p-4 sm:pb-28 sm:pt-24">
           <div className="max-w-4xl mx-auto space-y-4">
             {listPlaces.length === 0 ? (
               <div className="retro-modal rounded-2xl border border-white/60 bg-white/70 p-5 text-center text-slate-600 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur">
@@ -2125,30 +2255,62 @@ export default function MapClient({ places }: { places: Place[] }) {
         </div>
       )}
 
-      {showFloatingUi && (
-        <button
-          type="button"
-          className="absolute bottom-[calc(env(safe-area-inset-bottom)+2rem)] left-1/2 z-[1000] grid h-11 w-[min(76vw,240px)] -translate-x-1/2 place-items-center overflow-hidden rounded-xl border border-4 border border-[#d9261c]/100 bg-[#f7c200]/78 shadow-[0_16px_38px_rgba(52,38,31,0.18)] backdrop-blur-md transition duration-200 hover:border-[#d9261c]/100 hover:ring-4 hover:ring-[#d9261c]/100 hover:shadow-[0_20px_46px_rgba(52,38,31,0.22)] active:translate-y-0 sm:bottom-4 sm:h-12 sm:w-[260px]"
-          style={bricolageButtonStyle}
-          onClick={openSpotForm}
-          aria-label="Nieuwe Club Mate spot melden"
+      <AnimatePresence initial={false}>
+        {showFloatingUi && (
+        <motion.div
+          key="spot-button"
+          className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+2rem)] z-[1000] flex justify-center px-3 sm:bottom-4"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 12 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Image
-            src="/mate%20alert.png"
-            alt=""
-            aria-hidden="true"
-            width={905}
-            height={100}
-            className="h-auto w-[94%] object-contain"
-          />
-        </button>
-      )}
+          <motion.button
+            type="button"
+            className="pointer-events-auto relative grid h-11 w-[min(76vw,240px)] place-items-center overflow-hidden rounded-xl border-4 border-[#d9261c] bg-[#f7c200]/78 shadow-[0_16px_38px_rgba(52,38,31,0.18)] backdrop-blur-md transition duration-200 hover:border-[#d9261c] hover:ring-4 hover:ring-[#d9261c]/70 hover:shadow-[0_20px_46px_rgba(52,38,31,0.22)] sm:h-12 sm:w-[260px]"
+            style={bricolageButtonStyle}
+            onClick={openSpotForm}
+            aria-label="Nieuwe Club Mate spot melden"
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+          >
+            <ShineBorder
+              borderWidth={2}
+              duration={9}
+              shineColor={["rgba(255,248,232,0.95)", "rgba(217,38,28,0.75)", "rgba(247,194,0,0.95)"]}
+            />
+            <Image
+              src="/mate%20alert.png"
+              alt=""
+              aria-hidden="true"
+              width={905}
+              height={100}
+              className="relative z-10 h-auto w-[94%] object-contain"
+            />
+          </motion.button>
+        </motion.div>
+        )}
+      </AnimatePresence>
 
-      {spotFormOpen && (
-        <div className="fixed inset-0 z-[1150] bg-slate-950/40 p-3 backdrop-blur-sm sm:p-6" onClick={closeSpotForm}>
-          <div
+      <AnimatePresence initial={false}>
+        {spotFormOpen && (
+        <motion.div
+          key="spot-form"
+          className="fixed inset-0 z-[1150] bg-slate-950/40 p-3 backdrop-blur-sm sm:p-6"
+          onClick={closeSpotForm}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.div
             className="retro-modal mx-auto flex h-full w-full max-w-xl flex-col overflow-hidden rounded-[2rem] border border-white/50 bg-white/90 shadow-[0_28px_80px_rgba(15,23,42,0.28)] backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 18, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 14, scale: 0.985 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6">
               <div>
@@ -2161,11 +2323,11 @@ export default function MapClient({ places }: { places: Place[] }) {
                 onClick={closeSpotForm}
                 aria-label="Sluit formulier"
               >
-                ×
+                <X className="h-4 w-4" aria-hidden="true" strokeWidth={2.3} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-auto p-4 sm:p-6">
+            <div className="smooth-scroll-panel flex-1 overflow-auto p-4 sm:p-6">
               <div className="space-y-4">
                 <label className="block space-y-1">
                   <span className="text-sm font-medium text-slate-700">Naam van café of winkel</span>
@@ -2240,30 +2402,62 @@ export default function MapClient({ places }: { places: Place[] }) {
                   </div>
                 )}
 
-                <button
+                <Button
                   type="button"
                   className={`${accentButtonClass} min-h-11 w-full px-5 py-3 text-sm font-medium disabled:opacity-60`}
                   onClick={submitSpotForm}
                   disabled={isSubmittingSpot}
                 >
-                  {isSubmittingSpot ? "Bezig..." : "Bevestigen"}
-                </button>
+                  {isSubmittingSpot ? (
+                    <span className="flex items-center justify-center gap-2">
+                      Bezig
+                      <span className="scale-75">
+                        <LoaderTwo />
+                      </span>
+                    </span>
+                  ) : (
+                    "Bevestigen"
+                  )}
+                </Button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        </motion.div>
+        )}
+      </AnimatePresence>
 
-      {infoPanelOpen && (
-        <div className="fixed inset-0 z-[1150] grid place-items-center bg-slate-950/40 p-3 backdrop-blur-sm sm:p-6" onClick={() => setInfoPanelOpen(false)}>
-          <div
-            className="retro-modal w-full max-w-md rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/90 p-5 text-slate-800 shadow-[0_28px_80px_rgba(52,38,31,0.28)] backdrop-blur-xl sm:p-6"
+      <AnimatePresence initial={false}>
+        {infoPanelOpen && (
+        <motion.div
+          key="info-panel"
+          className="fixed inset-0 z-[1150] grid place-items-center bg-slate-950/40 p-3 backdrop-blur-sm sm:p-6"
+          onClick={() => setInfoPanelOpen(false)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.div
+            className="retro-modal flex max-h-[calc(100svh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/90 p-5 text-slate-800 shadow-[0_28px_80px_rgba(52,38,31,0.28)] backdrop-blur-xl sm:max-h-[min(82svh,46rem)] sm:p-6"
             onClick={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 12, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.985 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Info</div>
-                <div className="retro-display mt-1 text-2xl leading-tight text-[#2f2822]">Mate Alert</div>
+                <div className="relative mt-2 h-7 w-40 sm:h-8 sm:w-44" aria-label="Mate Alert">
+                  <Image
+                    src="/mate%20alert.png"
+                    alt="Mate Alert"
+                    fill
+                    sizes="176px"
+                    className="object-contain object-left"
+                    priority={false}
+                  />
+                </div>
               </div>
               <button
                 type="button"
@@ -2271,29 +2465,109 @@ export default function MapClient({ places }: { places: Place[] }) {
                 onClick={() => setInfoPanelOpen(false)}
                 aria-label="Sluit info"
               >
-                ×
+                <X className="h-4 w-4" aria-hidden="true" strokeWidth={2.3} />
               </button>
             </div>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
-              <p>
-                Deze kaart verzamelt plekken in Antwerpen waar je Club Mate kan vinden: cafés, winkels en andere spots.
-              </p>
-              <p>
-                Gebruik de filters bovenaan om te wisselen tussen kaart en lijst, categorieën te tonen of enkel plekken te zien die nu open zijn.
-              </p>
-              <p>
-                Tik op een pin of locatie voor adres, openingsuren en voorraadmeldingen. Met “Gespot!” kan je een nieuwe plek doorgeven.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {selectedPlace && (
-        <div className="fixed inset-0 z-[1100] flex items-end justify-center p-3 sm:items-end sm:justify-end sm:p-4" onClick={() => setSelectedPlaceName(null)}>
-          <div
-            className="retro-info-panel max-h-[calc(100svh-1.5rem)] w-full max-w-md overflow-auto rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/84 p-3.5 shadow-[0_28px_80px_rgba(52,38,31,0.3)] backdrop-blur-xl sm:max-h-[78svh] sm:p-5"
+<div className="smooth-scroll-panel -mx-1 mt-4 flex-1 space-y-4 overflow-auto px-1 pr-2 text-sm leading-relaxed text-slate-700">
+  <p>
+    Heb je zin in die koude, overheerlijke en verslavende{" "}
+    <a
+      href="https://www.club-mate.de/en/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-semibold underline underline-offset-2 hover:opacity-80"
+    >
+      Club Mate
+    </a>
+    ? Of heb jij de drang om alle spots met{" "}
+    <a
+      href="https://www.clubmate.de/en/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-semibold underline underline-offset-2 hover:opacity-80"
+    >
+      Club Mate
+    </a>{" "}
+    mee aan te vullen op de kaart? Dan is dit de juiste plek.
+  </p>
+  <p>
+    Deze website is een verzameling van verschillende verkooppunten van het
+    drankje. Van cafés, koffiebars en restaurants tot supermarkten,
+    nachtwinkels en andere random plekken waar iemand ooit plots oog in oog
+    stond met een flesje{" "}
+    <a
+      href="https://www.clubmate.de/en/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-semibold underline underline-offset-2 hover:opacity-80"
+    >
+      Club Mate
+    </a>
+    .
+  </p>
+  <p>
+    Deze website is volledig community based. Elke locatie werd handmatig
+    toegevoegd door mensen die ergens een spot gevonden hebben. Daardoor kan het
+    zijn dat sommige locaties niet meer kloppen, tijdelijk uitverkocht zijn of
+    gestopt zijn met verkopen. In dat geval kan je dit melden bij de locatie
+    zelf zodat de kaart een beetje proper blijft voor de volgende wanhopige
+    zoeker.
+  </p>
+  <div>
+    <h3 className="mb-2 font-bold">Hoe werkt het?</h3>
+    <p>
+      Zelf een mate gespot in het wild? Gebruik dan de Mate Alert knop onderaan
+      het scherm en geef de locatie in. Na het toevoegen verschijnt deze
+      automatisch op de kaart zodat anderen die plek ook kunnen terugvinden.
+    </p>
+  </div>
+  <p>
+    Je kan op locaties klikken om meer info te bekijken zoals de naam van de
+    plek, het adres en soms extra info die werd toegevoegd door andere
+    gebruikers. Sommige spots zijn hidden gems. Andere zijn letterlijk gewoon een
+    tankstation ergens in de middle of nowhere. Alles telt.
+  </p>
+  <p>
+    Dus: zie je ergens{" "}
+    <a
+      href="https://www.club-mate.de/en/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-semibold underline underline-offset-2 hover:opacity-80"
+    >
+      Club Mate
+    </a>{" "}
+    staan? Voeg het toe. Zie je een fout? Meld het. En vooral: ga op
+    ontdekking.
+  </p>
+  <p className="font-semibold">
+    Veel succes met uw zoektocht naar cafeïne en innerlijke vrede.
+  </p>
+</div>
+          </motion.div>
+        </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence initial={false}>
+        {selectedPlace && (
+        <motion.div
+          key="place-details"
+          className="fixed inset-0 z-[1100] flex items-end justify-center p-3 sm:items-end sm:justify-end sm:p-4"
+          onClick={() => setSelectedPlaceName(null)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.div
+            className="smooth-scroll-panel retro-info-panel max-h-[calc(100svh-1.5rem)] w-full max-w-md overflow-auto rounded-[1.75rem] border border-white/55 bg-[#fff7e8]/84 p-3.5 shadow-[0_28px_80px_rgba(52,38,31,0.3)] backdrop-blur-xl sm:max-h-[78svh] sm:p-5"
             onClick={(event) => event.stopPropagation()}
+            initial={{ opacity: 0, y: 22, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 18, scale: 0.985 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           >
             <PlaceDetails
               key={selectedPlace.name}
@@ -2306,9 +2580,10 @@ export default function MapClient({ places }: { places: Place[] }) {
               onClose={() => setSelectedPlaceName(null)}
               todayIndex={todayIndex}
             />
-          </div>
-        </div>
-      )}
+          </motion.div>
+        </motion.div>
+        )}
+      </AnimatePresence>
 
       {pendingMateReport && (
         <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/40 p-4">
