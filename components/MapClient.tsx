@@ -15,7 +15,6 @@ import L from "leaflet";
 import type { MateReportStatus, OpeningInterval, Place } from "@/data/placeTypes";
 import { Button } from "@/components/ui/button";
 import { LoaderTwo } from "@/components/ui/loader";
-import { ShineBorder } from "@/components/ui/shine-border";
 
 type AdminPlaceForm = {
   name: string;
@@ -751,12 +750,30 @@ function ClusteredPlaceMarkers({
   useEffect(() => {
     const clusterGroup = L.markerClusterGroup({
       chunkedLoading: true,
-      disableClusteringAtZoom: 18,
+      disableClusteringAtZoom: 17,
       maxClusterRadius: 42,
       showCoverageOnHover: false,
       spiderfyDistanceMultiplier: 1.35,
       spiderfyOnMaxZoom: true,
-      zoomToBoundsOnClick: true,
+      zoomToBoundsOnClick: false,
+    });
+
+    clusterGroup.on("clusterclick", (event) => {
+      const cluster = event.layer as L.MarkerCluster;
+      const bounds = cluster.getBounds();
+      const nextZoom = Math.min(
+        map.getBoundsZoom(bounds, false, L.point(72, 72)),
+        map.getZoom() + 1.5,
+        17,
+      );
+
+      map.flyToBounds(bounds, {
+        animate: true,
+        duration: 0.55,
+        easeLinearity: 0.18,
+        maxZoom: nextZoom,
+        padding: [72, 72],
+      });
     });
 
     for (const place of places) {
@@ -2300,11 +2317,6 @@ export default function MapClient({ places }: { places: Place[] }) {
             whileTap={{ scale: 0.98 }}
             transition={{ duration: 0.16, ease: "easeOut" }}
           >
-            <ShineBorder
-              borderWidth={2}
-              duration={9}
-              shineColor={["rgba(255,248,232,0.95)", "rgba(217,38,28,0.75)", "rgba(247,194,0,0.95)"]}
-            />
             <Image
               src="/mate%20alert.png"
               alt=""
