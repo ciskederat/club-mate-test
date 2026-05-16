@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import Image from "next/image";
 import { Info, Settings, X } from "lucide-react";
@@ -164,6 +164,12 @@ type MateReports = Record<string, MateReport>;
 type PendingMateReport = {
   placeName: string;
   status: MateReportStatus;
+};
+
+type SaveAdminPlaceOptions = {
+  closePanel?: boolean;
+  showSuccessToast?: boolean;
+  showValidationErrors?: boolean;
 };
 
 type DirectionsTarget = {
@@ -868,6 +874,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [adminAutoSaveStatus, setAdminAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const lastSavedAdminSignatureRef = useRef(getAdminFormSignature(createEmptyAdminForm()));
   const adminAutoSaveTimerRef = useRef<number | null>(null);
+  const saveAdminPlaceRef = useRef<((options?: SaveAdminPlaceOptions) => Promise<boolean>) | null>(null);
   const [quickHoursScope, setQuickHoursScope] = useState<"all" | "weekdays" | "weekend">("weekdays");
   const [quickHoursOpen, setQuickHoursOpen] = useState("09:00");
   const [quickHoursClose, setQuickHoursClose] = useState("18:00");
@@ -1428,7 +1435,7 @@ export default function MapClient({ places }: { places: Place[] }) {
     closePanel = true,
     showSuccessToast = true,
     showValidationErrors = true,
-  } = {}) => {
+  }: SaveAdminPlaceOptions = {}) => {
     const latitude = Number(adminForm.latitude);
     const longitude = Number(adminForm.longitude);
     const parsedHours = parseAdminHours(adminForm.dayHours);
@@ -1531,8 +1538,11 @@ export default function MapClient({ places }: { places: Place[] }) {
   };
 
   useEffect(() => {
+    saveAdminPlaceRef.current = saveAdminPlace;
+  });
+
+  useEffect(() => {
     if (!adminPanelOpen || !isAdminUnlocked) {
-      setAdminAutoSaveStatus("idle");
       return;
     }
 
@@ -1558,7 +1568,7 @@ export default function MapClient({ places }: { places: Place[] }) {
     }
 
     adminAutoSaveTimerRef.current = window.setTimeout(() => {
-      saveAdminPlace({
+      saveAdminPlaceRef.current?.({
         closePanel: false,
         showSuccessToast: false,
         showValidationErrors: false,
