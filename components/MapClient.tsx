@@ -381,8 +381,23 @@ const formatHours = (hours: Place["hours"], todayIndex: number) =>
 
 const typeLabel = (type: Place["type"]) => {
   if (type === "cafe") return "Café";
+  if (type === "coffee_bar") return "Koffiebar";
+  if (type === "restaurant") return "Restaurant";
+  if (type === "lunchbar") return "Lunchbar";
   if (type === "shop") return "Supermarkt";
   return "Overig";
+};
+
+const placeMatchesFilter = (place: Place, normalizedFilter: string) => {
+  if (normalizedFilter === "all") {
+    return true;
+  }
+
+  if (normalizedFilter === "cafe") {
+    return place.type === "cafe" || place.type === "coffee_bar";
+  }
+
+  return normalizeType(place.type) === normalizedFilter;
 };
 
 const reportStatusLabel = (status: MateReportStatus) =>
@@ -1019,7 +1034,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const filteredPlaces = useMemo(() => {
     const placesByType = normalizedFilter === "all"
       ? safePlaces
-      : safePlaces.filter((place) => normalizeType(place.type) === normalizedFilter);
+      : safePlaces.filter((place) => placeMatchesFilter(place, normalizedFilter));
 
     if (!openNowOnly) {
       return placesByType;
@@ -1766,6 +1781,9 @@ export default function MapClient({ places }: { places: Place[] }) {
                       onChange={(event) => setAdminForm((form) => ({ ...form, type: event.target.value as Place["type"] }))}
                     >
                       <option value="cafe">Café</option>
+                      <option value="coffee_bar">Koffiebar</option>
+                      <option value="restaurant">Restaurant</option>
+                      <option value="lunchbar">Lunchbar</option>
                       <option value="shop">Supermarkt</option>
                       <option value="other">Overig</option>
                     </select>

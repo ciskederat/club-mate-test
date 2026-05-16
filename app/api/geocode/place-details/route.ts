@@ -1,4 +1,5 @@
 import { parseGoogleOpeningHours, parseOpeningHoursText, parseWeekdayDescriptions } from "@/lib/openingHours";
+import type { OpeningInterval } from "@/data/placeTypes";
 
 const getGoogleApiKey = () => process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY;
 
@@ -24,13 +25,29 @@ const mapGoogleTypeToPlaceType = (primaryType?: string | null, googleMapsTypeLab
   }
 
   if (
-    combinedTypeText.includes("cafe")
-    || combinedTypeText.includes("bar")
-    || combinedTypeText.includes("restaurant")
+    combinedTypeText.includes("coffee")
+    || combinedTypeText.includes("caf")
+  ) {
+    return "coffee_bar";
+  }
+
+  if (
+    combinedTypeText.includes("restaurant")
+  ) {
+    return "restaurant";
+  }
+
+  if (
+    combinedTypeText.includes("lunch")
+    || combinedTypeText.includes("sandwich")
+  ) {
+    return "lunchbar";
+  }
+
+  if (
+    combinedTypeText.includes("bar")
     || combinedTypeText.includes("night_club")
     || combinedTypeText.includes("pub")
-    || combinedTypeText.includes("coffee")
-    || combinedTypeText.includes("caf")
   ) {
     return "cafe";
   }
@@ -54,10 +71,30 @@ const mapGeoapifyCategoryToPlaceType = (category?: string | null) => {
   }
 
   if (
-    normalizedCategory.includes("catering")
+    normalizedCategory.includes("catering.cafe")
     || normalizedCategory.includes("cafe")
-    || normalizedCategory.includes("restaurant")
-    || normalizedCategory.includes("bar")
+    || normalizedCategory.includes("coffee")
+  ) {
+    return "coffee_bar";
+  }
+
+  if (
+    normalizedCategory.includes("restaurant")
+    || normalizedCategory.includes("catering.restaurant")
+  ) {
+    return "restaurant";
+  }
+
+  if (
+    normalizedCategory.includes("lunch")
+    || normalizedCategory.includes("sandwich")
+    || normalizedCategory.includes("fast_food")
+  ) {
+    return "lunchbar";
+  }
+
+  if (
+    normalizedCategory.includes("bar")
     || normalizedCategory.includes("pub")
   ) {
     return "cafe";
@@ -65,6 +102,19 @@ const mapGeoapifyCategoryToPlaceType = (category?: string | null) => {
 
   return "other";
 };
+
+type GoogleOpeningHours = {
+  periods?: Array<{
+    open?: { day?: number; hour?: number; minute?: number; time?: string };
+    close?: { day?: number; hour?: number; minute?: number; time?: string };
+  }>;
+  weekdayDescriptions?: string[];
+};
+
+const hasAnyHours = (hours: OpeningInterval[][]) => hours.some((dayHours) => dayHours.length > 0);
+
+const firstHoursWithData = (...hourSets: OpeningInterval[][][]) =>
+  hourSets.find(hasAnyHours) ?? hourSets[0];
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -84,7 +134,7 @@ export async function GET(request: Request) {
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": googleApiKey,
-        "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,googleMapsTypeLabel,regularOpeningHours.periods,regularOpeningHours.weekdayDescriptions,websiteUri",
+        "X-Goog-FieldMask": "id,displayName,formattedAddress,location,primaryType,googleMapsTypeLabel,regularOpeningHours.periods,regularOpeningHours.weekdayDescriptions,currentOpeningHours.periods,currentOpeningHours.weekdayDescriptions,regularSecondaryOpeningHours.periods,regularSecondaryOpeningHours.weekdayDescriptions,websiteUri",
         ...(sessionToken ? { "X-Goog-Session-Token": sessionToken } : {}),
       },
       cache: "no-store",
@@ -105,25 +155,32 @@ export async function GET(request: Request) {
         googleMapsTypeLabel?: {
           text?: string;
         };
-        regularOpeningHours?: {
-          periods?: Array<{
-            open?: { day?: number; hour?: number; minute?: number; time?: string };
-            close?: { day?: number; hour?: number; minute?: number; time?: string };
-          }>;
-          weekdayDescriptions?: string[];
-        };
+        regularOpeningHours?: GoogleOpeningHours;
+        currentOpeningHours?: GoogleOpeningHours;
+        regularSecondaryOpeningHours?: GoogleOpeningHours;
         websiteUri?: string;
       } | null;
 
-      const parsedHoursFromPeriods = parseGoogleOpeningHours(data?.regularOpeningHours);
-      const hasAnyPeriods = parsedHoursFromPeriods.some((dayHours) => dayHours.length > 0);
-      const parsedHoursFromDescriptions = parseWeekdayDescriptions(data?.regularOpeningHours?.weekdayDescriptions);
+      const parsedHoursFromRegularPeriods = parseGoogleOpeningHours(data?.regularOpeningHours);
+      const parsedHoursFromCurrentPeriods = parseGoogleOpeningHours(data?.currentOpeningHours);
+      const parsedHoursFromSecondaryPeriods = parseGoogleOpeningHours(data?.regularSecondaryOpeningHours);
+      const parsedHoursFromRegularDescriptions = parseWeekdayDescriptions(data?.regularOpeningHours?.weekdayDescriptions);
+      const parsedHoursFromCurrentDescriptions = parseWeekdayDescriptions(data?.currentOpeningHours?.weekdayDescriptions);
+      const parsedHoursFromSecondaryDescriptions = parseWeekdayDescriptions(data?.regularSecondaryOpeningHours?.weekdayDescriptions);
+      const parsedHours = firstHoursWithData(
+        parsedHoursFromRegularPeriods,
+        parsedHoursFromCurrentPeriods,
+        parsedHoursFromSecondaryPeriods,
+        parsedHoursFromRegularDescriptions,
+        parsedHoursFromCurrentDescriptions,
+        parsedHoursFromSecondaryDescriptions,
+      );
 
       return Response.json({
         provider: "google",
         placeId: data?.id ?? placeId ?? null,
-        hours: hasAnyPeriods ? parsedHoursFromPeriods : parsedHoursFromDescriptions,
-        rawOpeningHours: data?.regularOpeningHours ?? null,
+        hours: parsedHours,
+        rawOpeningHours: data?.regularOpeningHours ?? data?.currentOpeningHours ?? data?.regularSecondaryOpeningHours ?? null,
         address: data?.formattedAddress ?? null,
         name: data?.displayName?.text ?? null,
         website: data?.websiteUri ?? null,

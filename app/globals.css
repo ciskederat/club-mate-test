@@ -91,14 +91,12 @@ textarea:focus {
 .user-marker {
   filter: drop-shadow(0 8px 10px rgba(52, 38, 31, 0.22));
   transform-origin: bottom center;
-  transition:
-    filter 180ms ease,
-    transform 180ms ease;
+  transition: filter 180ms ease;
+  will-change: transform;
 }
 
 .place-marker:hover {
   filter: drop-shadow(0 12px 14px rgba(52, 38, 31, 0.28));
-  transform: translateY(-2px) scale(1.04);
 }
 
 .retro-surface,

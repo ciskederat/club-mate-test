@@ -9,7 +9,15 @@ const mapGoogleTypeToPlaceType = (types?: string[]) => {
     return "shop";
   }
 
-  if (types.some((type) => type.includes("cafe") || type.includes("bar") || type.includes("restaurant") || type.includes("night_club"))) {
+  if (types.some((type) => type.includes("coffee_shop") || type.includes("cafe"))) {
+    return "coffee_bar";
+  }
+
+  if (types.some((type) => type.includes("restaurant"))) {
+    return "restaurant";
+  }
+
+  if (types.some((type) => type.includes("bar") || type.includes("night_club") || type.includes("pub"))) {
     return "cafe";
   }
 
@@ -32,10 +40,30 @@ const mapGeoapifyCategoryToPlaceType = (category?: string | null) => {
   }
 
   if (
-    normalizedCategory.includes("catering")
+    normalizedCategory.includes("catering.cafe")
     || normalizedCategory.includes("cafe")
-    || normalizedCategory.includes("restaurant")
-    || normalizedCategory.includes("bar")
+    || normalizedCategory.includes("coffee")
+  ) {
+    return "coffee_bar";
+  }
+
+  if (
+    normalizedCategory.includes("restaurant")
+    || normalizedCategory.includes("catering.restaurant")
+  ) {
+    return "restaurant";
+  }
+
+  if (
+    normalizedCategory.includes("lunch")
+    || normalizedCategory.includes("sandwich")
+    || normalizedCategory.includes("fast_food")
+  ) {
+    return "lunchbar";
+  }
+
+  if (
+    normalizedCategory.includes("bar")
     || normalizedCategory.includes("pub")
   ) {
     return "cafe";
