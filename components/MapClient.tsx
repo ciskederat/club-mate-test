@@ -50,8 +50,8 @@ const icon = new L.Icon({
 
 const userIcon = new L.Icon({
   iconUrl: "/mijn-pin.png",
-  iconSize: [24, 24],
-  iconAnchor: [12, 24],
+  iconSize: [14, 36],
+  iconAnchor: [7, 36],
   className: "user-marker",
 });
 
@@ -388,6 +388,31 @@ const getOpenStatus = (place: Place, now: Date): OpenStatus => {
   };
 };
 
+const formatDisplayHoursForDay = (hours: Place["hours"], dayIndex: number) => {
+  const intervals = hours?.[dayIndex] ?? [];
+  const previousDayIntervals = hours?.[(dayIndex + 6) % 7] ?? [];
+  const nextDayIntervals = hours?.[(dayIndex + 1) % 7] ?? [];
+  const carriedFromPreviousNight = previousDayIntervals.some((interval) => interval.close === "23:59");
+  const nextMorningInterval = nextDayIntervals.find((interval) => interval.open === "00:00");
+  const displayIntervals = intervals
+    .filter((interval) => !(interval.open === "00:00" && carriedFromPreviousNight))
+    .sort((a, b) => parseTime(a.open) - parseTime(b.open));
+
+  if (displayIntervals.length === 0) {
+    return "Gesloten";
+  }
+
+  return displayIntervals
+    .map((interval) => {
+      const close = interval.close === "23:59" && nextMorningInterval
+        ? nextMorningInterval.close
+        : interval.close;
+
+      return `${interval.open} - ${close}`;
+    })
+    .join(", ");
+};
+
 const formatHours = (hours: Place["hours"], todayIndex: number) =>
   displayDayOrder.map((index) => {
     const intervals = hours?.[index] ?? [];
@@ -397,9 +422,7 @@ const formatHours = (hours: Place["hours"], todayIndex: number) =>
       day: dayLabels[index],
       shortDay: shortDayLabels[index],
       isToday: index === todayIndex,
-      value: intervals.length === 0
-        ? "Gesloten"
-        : intervals.map((interval) => `${interval.open} - ${interval.close}`).join(", "),
+      value: intervals.length === 0 ? "Gesloten" : formatDisplayHoursForDay(hours, index),
     };
   });
 
