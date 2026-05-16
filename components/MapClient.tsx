@@ -177,6 +177,22 @@ type DirectionsTarget = {
   position: [number, number];
 };
 
+type VisitorEvent = {
+  id: string;
+  sessionId: string;
+  path?: string;
+  deviceType?: string;
+  browser?: string;
+  os?: string;
+  language?: string;
+  timezone?: string;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  createdAt: string;
+};
+
 type SuggestionDetails = {
   hours?: OpeningInterval[][];
   rawOpeningHours?: unknown;
@@ -203,6 +219,7 @@ const mateReportsStorageKey = "clubmate-map-reports";
 const adminSessionStorageKey = "clubmate-map-admin-unlocked";
 const adminSessionPasscodeKey = "clubmate-map-admin-code";
 const introSeenStorageKey = "mate-alert-intro-seen";
+const visitorSessionStorageKey = "mate-alert-visitor-session";
 
 const normalizeType = (value: unknown) =>
   value
@@ -214,6 +231,52 @@ const normalizeType = (value: unknown) =>
 
 const getPlaceKey = (place: Place) =>
   place.id ?? `${normalizeType(place.name)}-${place.position[0]}-${place.position[1]}-${normalizeType(place.address)}`;
+
+const getVisitorSessionId = () => {
+  const storedSessionId = window.localStorage.getItem(visitorSessionStorageKey);
+
+  if (storedSessionId) {
+    return storedSessionId;
+  }
+
+  const sessionId = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  window.localStorage.setItem(visitorSessionStorageKey, sessionId);
+  return sessionId;
+};
+
+const getDeviceType = () => {
+  const userAgent = navigator.userAgent.toLowerCase();
+
+  if (/ipad|tablet/.test(userAgent)) return "Tablet";
+  if (/mobi|android|iphone|ipod/.test(userAgent)) return "GSM";
+  return "Desktop";
+};
+
+const getBrowserName = () => {
+  const userAgent = navigator.userAgent;
+
+  if (/Edg\//.test(userAgent)) return "Edge";
+  if (/Chrome\//.test(userAgent) && !/Chromium|Edg\//.test(userAgent)) return "Chrome";
+  if (/Safari\//.test(userAgent) && !/Chrome\//.test(userAgent)) return "Safari";
+  if (/Firefox\//.test(userAgent)) return "Firefox";
+  return "Onbekend";
+};
+
+const getOperatingSystem = () => {
+  const userAgent = navigator.userAgent;
+
+  if (/iPhone|iPad|iPod/.test(userAgent)) return "iOS";
+  if (/Android/.test(userAgent)) return "Android";
+  if (/Macintosh|Mac OS X/.test(userAgent)) return "macOS";
+  if (/Windows/.test(userAgent)) return "Windows";
+  if (/Linux/.test(userAgent)) return "Linux";
+  return "Onbekend";
+};
+
+const roundVisitorCoordinate = (value: number) => Number(value.toFixed(2));
 
 const createEmptyHours = () => Array.from({ length: 7 }, () => "");
 const timeOptions = Array.from({ length: 48 }, (_, index) => {
@@ -892,6 +955,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [openNowOnly, setOpenNowOnly] = useState(false);
   const [databasePlaces, setDatabasePlaces] = useState<Place[]>(() => Array.isArray(places) ? places : []);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [adminSegment, setAdminSegment] = useState<"locations" | "visits">("locations");
   const [adminPasscodeInput, setAdminPasscodeInput] = useState("");
   const [adminPasscode, setAdminPasscode] = useState(() => {
     if (typeof window === "undefined") {
@@ -915,6 +979,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const lastSavedAdminSignatureRef = useRef(getAdminFormSignature(createEmptyAdminForm()));
   const adminAutoSaveTimerRef = useRef<number | null>(null);
   const saveAdminPlaceRef = useRef<((options?: SaveAdminPlaceOptions) => Promise<boolean>) | null>(null);
+  const visitTrackedRef = useRef(false);
   const [quickHoursScope, setQuickHoursScope] = useState<"all" | "weekdays" | "weekend">("weekdays");
   const [quickHoursOpen, setQuickHoursOpen] = useState("09:00");
   const [quickHoursClose, setQuickHoursClose] = useState("18:00");
@@ -931,6 +996,9 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [spotFormMessage, setSpotFormMessage] = useState<string | null>(null);
   const [isSubmittingSpot, setIsSubmittingSpot] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [visitorEvents, setVisitorEvents] = useState<VisitorEvent[]>([]);
+  const [isLoadingVisitorEvents, setIsLoadingVisitorEvents] = useState(false);
+  const [visitorEventsError, setVisitorEventsError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const [introPanelOpen, setIntroPanelOpen] = useState(false);
@@ -1069,6 +1137,51 @@ export default function MapClient({ places }: { places: Place[] }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (visitTrackedRef.current) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      visitTrackedRef.current = true;
+
+      const roundedLocation = userLocation
+        ? {
+            latitude: roundVisitorCoordinate(userLocation[0]),
+            longitude: roundVisitorCoordinate(userLocation[1]),
+          }
+        : {
+            latitude: null,
+            longitude: null,
+          };
+
+      fetch("/api/visits", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId: getVisitorSessionId(),
+          path: window.location.pathname,
+          deviceType: getDeviceType(),
+          browser: getBrowserName(),
+          os: getOperatingSystem(),
+          language: navigator.language,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          ...roundedLocation,
+        }),
+      }).catch(() => {
+        // Analytics should never block the map experience.
+      });
+    }, userLocation ? 500 : 2500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [userLocation]);
 
   useEffect(() => {
     const query = adminForm.address.trim();
@@ -1227,6 +1340,29 @@ export default function MapClient({ places }: { places: Place[] }) {
     if (!selectedPlace || !userLocation) return undefined;
     return getDistanceKm(userLocation, selectedPlace.position);
   }, [selectedPlace, userLocation]);
+  const uniqueVisitorCount = useMemo(
+    () => new Set(visitorEvents.map((visit) => visit.sessionId)).size,
+    [visitorEvents],
+  );
+  const visitorLocationCount = useMemo(
+    () => visitorEvents.filter((visit) => visit.latitude != null && visit.longitude != null).length,
+    [visitorEvents],
+  );
+  const formatVisitDate = (value: string) => {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "Onbekend";
+    }
+
+    return new Intl.DateTimeFormat("nl-BE", {
+      timeZone: placeTimeZone,
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  };
 
   const selectViewMode = (mode: "map" | "list") => {
     setSelectedPlaceName(null);
@@ -1290,6 +1426,40 @@ export default function MapClient({ places }: { places: Place[] }) {
       const message = "Beheer ontgrendelen is mislukt.";
       setAdminError(message);
       toast.error(message);
+    }
+  };
+
+  const fetchVisitorEvents = async () => {
+    setIsLoadingVisitorEvents(true);
+    setVisitorEventsError(null);
+
+    try {
+      const response = await fetch("/api/admin/visits", {
+        headers: {
+          "x-admin-pin": adminPasscode,
+        },
+      });
+      const data = await response.json().catch(() => null);
+
+      if (response.status === 401) {
+        lockAdmin();
+        return;
+      }
+
+      if (!response.ok) {
+        setVisitorEventsError(data?.error ?? "Bezoekers ophalen is mislukt.");
+        return;
+      }
+
+      setVisitorEvents(Array.isArray(data?.visits) ? data.visits : []);
+
+      if (data?.databaseConfigured === false) {
+        setVisitorEventsError("Bezoekersdatabase is nog niet geconfigureerd.");
+      }
+    } catch {
+      setVisitorEventsError("Bezoekers ophalen is mislukt.");
+    } finally {
+      setIsLoadingVisitorEvents(false);
     }
   };
 
@@ -2046,6 +2216,115 @@ export default function MapClient({ places }: { places: Place[] }) {
               </button>
             </div>
           ) : (
+            <>
+            <div className="border-b border-slate-100 px-4 py-3 sm:px-6">
+              <div className="flex w-fit gap-1.5 rounded-2xl border border-[#9f4a3d]/18 bg-[#efe0c6]/62 p-1">
+                <button
+                  type="button"
+                  className={`${notableHomeButtonClass} ${adminSegment === "locations" ? toolbarActiveButtonClass : toolbarButtonClass} min-w-[76px]`}
+                  style={bricolageButtonStyle}
+                  onClick={() => setAdminSegment("locations")}
+                >
+                  Locaties
+                </button>
+                <button
+                  type="button"
+                  className={`${notableHomeButtonClass} ${adminSegment === "visits" ? toolbarActiveButtonClass : toolbarButtonClass} min-w-[82px]`}
+                  style={bricolageButtonStyle}
+                  onClick={() => {
+                    setAdminSegment("visits");
+                    fetchVisitorEvents();
+                  }}
+                >
+                  Bezoekers
+                </button>
+              </div>
+            </div>
+
+            {adminSegment === "visits" ? (
+              <div className="smooth-scroll-panel flex-1 overflow-auto p-4 sm:p-6">
+                <div className="space-y-4">
+                  <div className="rounded-3xl border border-amber-200/80 bg-amber-50/75 p-4 text-sm text-amber-900">
+                    Bezoekers worden anoniem getoond. Exacte identiteit, IP-adres en raw device fingerprint worden niet opgeslagen. Locatie verschijnt alleen afgerond wanneer iemand browserlocatie toestaat.
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-3xl border border-slate-200 bg-white/70 p-4">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bezoeken</div>
+                      <div className="mt-1 text-2xl font-semibold text-slate-900">{visitorEvents.length}</div>
+                    </div>
+                    <div className="rounded-3xl border border-slate-200 bg-white/70 p-4">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Unieke sessies</div>
+                      <div className="mt-1 text-2xl font-semibold text-slate-900">{uniqueVisitorCount}</div>
+                    </div>
+                    <div className="rounded-3xl border border-slate-200 bg-white/70 p-4">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Met locatie</div>
+                      <div className="mt-1 text-2xl font-semibold text-slate-900">{visitorLocationCount}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-800">Laatste bezoeken</div>
+                      <div className="text-xs text-slate-500">Maximaal de laatste 100 events.</div>
+                    </div>
+                    <button
+                      type="button"
+                      className={`${secondaryButtonClass} min-h-10 px-4 py-2 text-sm font-semibold`}
+                      onClick={fetchVisitorEvents}
+                    >
+                      Vernieuwen
+                    </button>
+                  </div>
+
+                  {visitorEventsError && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {visitorEventsError}
+                    </div>
+                  )}
+
+                  {isLoadingVisitorEvents ? (
+                    <div className="rounded-3xl border border-slate-200 bg-white/70 p-5 text-sm text-slate-500">Bezoekers laden...</div>
+                  ) : visitorEvents.length === 0 ? (
+                    <div className="rounded-3xl border border-slate-200 bg-white/70 p-5 text-sm text-slate-500">Nog geen bezoekers opgeslagen.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {visitorEvents.map((visit) => (
+                        <div key={visit.id} className="rounded-3xl border border-slate-200 bg-white/72 p-4 text-sm text-slate-700">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <div className="font-semibold text-slate-900">{formatVisitDate(visit.createdAt)}</div>
+                              <div className="text-xs text-slate-500">
+                                Sessie {visit.sessionId.slice(0, 8)}
+                              </div>
+                            </div>
+                            <div className="rounded-full bg-[#e5bd48]/22 px-3 py-1 text-xs font-semibold text-[#26304a]">
+                              {visit.deviceType ?? "Onbekend"}
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div>Browser: <span className="font-medium">{visit.browser ?? "Onbekend"}</span></div>
+                            <div>OS: <span className="font-medium">{visit.os ?? "Onbekend"}</span></div>
+                            <div>Taal: <span className="font-medium">{visit.language ?? "Onbekend"}</span></div>
+                            <div>Tijdzone: <span className="font-medium">{visit.timezone ?? "Onbekend"}</span></div>
+                            <div>Scherm: <span className="font-medium">{visit.viewportWidth && visit.viewportHeight ? `${visit.viewportWidth} x ${visit.viewportHeight}` : "Onbekend"}</span></div>
+                            <div>Pad: <span className="font-medium">{visit.path ?? "/"}</span></div>
+                            <div className="sm:col-span-2">
+                              Locatie:{" "}
+                              <span className="font-medium">
+                                {visit.latitude != null && visit.longitude != null
+                                  ? `${visit.latitude.toFixed(2)}, ${visit.longitude.toFixed(2)}`
+                                  : "Niet gedeeld"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
             <div className="grid flex-1 gap-0 overflow-hidden lg:grid-cols-[20rem_1fr]">
               <div className="overflow-auto border-b border-slate-100 p-4 lg:border-b-0 lg:border-r lg:p-5">
                 <div className="space-y-3">
@@ -2373,6 +2652,8 @@ export default function MapClient({ places }: { places: Place[] }) {
                 </div>
               </form>
 	            </div>
+            )}
+            </>
 	          )}
 	        </motion.div>
         </motion.div>

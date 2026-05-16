@@ -28,6 +28,25 @@ where consecutive_absent_count is null or consecutive_absent_count = 0;
 drop index if exists places_name_unique;
 create unique index if not exists places_unique_location on places (name, latitude, longitude);
 
+create table if not exists visitor_events (
+  id uuid primary key default gen_random_uuid(),
+  session_id text not null,
+  path text,
+  device_type text,
+  browser text,
+  os text,
+  language text,
+  timezone text,
+  viewport_width integer,
+  viewport_height integer,
+  latitude double precision,
+  longitude double precision,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists visitor_events_created_at_idx on visitor_events (created_at desc);
+create index if not exists visitor_events_session_id_idx on visitor_events (session_id);
+
 insert into places (name, type, address, latitude, longitude, info, hours)
 values
   (
