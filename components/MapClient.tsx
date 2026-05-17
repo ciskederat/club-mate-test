@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import Image from "next/image";
-import { Info, Settings, X } from "lucide-react";
+import { CheckCircle2, CircleSlash2, Info, Settings, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents, ZoomControl } from "react-leaflet";
 import { Toaster, toast } from "sonner";
@@ -12,7 +12,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
-import { introPopupText } from "@/data/siteText";
+import { infoPanelText, introPopupText } from "@/data/siteText";
 import type { MateReportStatus, OpeningInterval, Place } from "@/data/placeTypes";
 import { Button } from "@/components/ui/button";
 import { LoaderTwo } from "@/components/ui/loader";
@@ -530,6 +530,9 @@ const placeMatchesFilter = (place: Place, normalizedFilter: string) => {
 const reportStatusLabel = (status: MateReportStatus) =>
   status === "present" ? "Club Mate aanwezig" : "Niet meer aanwezig";
 
+const shortReportStatusLabel = (status: MateReportStatus) =>
+  status === "present" ? "Aanwezig" : "Afwezig";
+
 const isMateReportStatus = (value: unknown): value is MateReportStatus =>
   value === "present" || value === "absent";
 
@@ -662,6 +665,10 @@ function PlaceDetails({
   const formattedHours = formatHours(place.hours, todayIndex);
   const hasFixedHours = Boolean(place.hours?.some((dayHours) => dayHours.length > 0));
   const wasLastReportedAbsent = mateReport?.lastStatus === "absent";
+  const lastReportText =
+    mateReport?.lastStatus && mateReport.lastReportedAt
+      ? `Laatst: ${shortReportStatusLabel(mateReport.lastStatus)} op ${formatReportDate(mateReport.lastReportedAt)}`
+      : "Nog geen melding.";
 
   return (
     <div className="space-y-3.5 text-slate-900 sm:space-y-4">
@@ -683,17 +690,6 @@ function PlaceDetails({
       </div>
 
       <OpenBadge status={status} />
-
-      {wasLastReportedAbsent && (
-        <div className="rounded-2xl border border-rose-300/75 bg-rose-50/90 px-3.5 py-3 text-sm font-medium text-rose-900 shadow-[0_14px_32px_rgba(190,18,60,0.14)]">
-          Laatste melding: mogelijk geen Club Mate meer aanwezig.
-          {(mateReport?.consecutiveAbsentCount ?? 0) > 1 && (
-            <span className="block text-xs font-semibold text-rose-700">
-              {mateReport?.consecutiveAbsentCount} keer na elkaar afwezig gemeld.
-            </span>
-          )}
-        </div>
-      )}
 
       <div className="retro-soft-card space-y-1 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
         <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Adres</div>
@@ -719,36 +715,68 @@ function PlaceDetails({
         <div className="text-sm text-slate-800">{place.info}</div>
       </div>
 
-      <div className="retro-soft-card space-y-3 rounded-2xl border border-white/60 bg-[#fffaf0]/62 p-3 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3.5">
-        <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Club Mate voorraad</div>
-        <div className="flex flex-col gap-2 sm:flex-row">
+      <div className={`retro-soft-card rounded-2xl border p-2.5 shadow-[0_10px_26px_rgba(52,38,31,0.07)] backdrop-blur sm:p-3 ${
+        wasLastReportedAbsent
+          ? "border-rose-300/70 bg-rose-50/82"
+          : "border-[#f7c200]/45 bg-[#fff8e8]/72"
+      }`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Voorraad</div>
+            <div className="mt-1 text-xs leading-snug text-slate-600">
+              {lastReportText}
+            </div>
+          </div>
+          <div className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
+            wasLastReportedAbsent
+              ? "border-rose-300 bg-white/72 text-rose-800"
+              : mateReport?.lastStatus === "present"
+                ? "border-emerald-300 bg-white/72 text-emerald-800"
+                : "border-[#f7c200]/55 bg-white/72 text-[#26304a]"
+          }`}>
+            <span className={`h-2 w-2 rounded-full ${
+              wasLastReportedAbsent
+                ? "bg-rose-500"
+                : mateReport?.lastStatus === "present"
+                  ? "bg-emerald-500"
+                  : "bg-[#f7c200]"
+            }`} aria-hidden="true" />
+            {mateReport?.lastStatus ? shortReportStatusLabel(mateReport.lastStatus) : "Onbekend"}
+          </div>
+        </div>
+
+        {wasLastReportedAbsent && (mateReport?.consecutiveAbsentCount ?? 0) > 1 && (
+          <div className="mt-2 rounded-xl border border-rose-200/80 bg-white/58 px-2.5 py-1.5 text-xs font-semibold text-rose-800">
+            {mateReport?.consecutiveAbsentCount} keer na elkaar afwezig gemeld.
+          </div>
+        )}
+
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
           <button
             type="button"
-            className={`${accentButtonClass} min-h-10 px-3.5 py-2 text-sm font-semibold`}
+            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#d9261c]/45 bg-[#f7c200] px-2.5 py-2 text-xs font-bold text-[#26304a] shadow-[0_5px_14px_rgba(52,38,31,0.11)] transition hover:-translate-y-0.5 hover:bg-[#e9b700] hover:shadow-[0_8px_18px_rgba(52,38,31,0.15)] active:translate-y-0"
             onClick={() => onMateReport(place.name, "present")}
           >
-            Club Mate aanwezig
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" strokeWidth={2.4} />
+            Aanwezig
           </button>
           <button
             type="button"
-            className={`${secondaryButtonClass} min-h-10 px-3.5 py-2 text-sm font-medium`}
+            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-rose-300/85 bg-white/70 px-2.5 py-2 text-xs font-bold text-rose-800 shadow-[0_5px_14px_rgba(52,38,31,0.07)] transition hover:-translate-y-0.5 hover:bg-rose-50 hover:shadow-[0_8px_18px_rgba(52,38,31,0.11)] active:translate-y-0"
             onClick={() => onMateReport(place.name, "absent")}
           >
-            Niet meer aanwezig
+            <CircleSlash2 className="h-4 w-4" aria-hidden="true" strokeWidth={2.4} />
+            Afwezig
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-xl bg-[#ecd2aa]/35 px-3 py-2 text-slate-700">
-            Aanwezig gemeld: <span className="font-semibold">{mateReport?.presentCount ?? 0}</span>
+
+        <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-slate-700">
+          <div className="rounded-full bg-white/58 px-2.5 py-1">
+            Aanwezig <span className="font-bold">{mateReport?.presentCount ?? 0}</span>
           </div>
-          <div className="rounded-xl bg-[#ecd2aa]/35 px-3 py-2 text-slate-700">
-            Niet aanwezig: <span className="font-semibold">{mateReport?.absentCount ?? 0}</span>
+          <div className="rounded-full bg-white/58 px-2.5 py-1">
+            Afwezig <span className="font-bold">{mateReport?.absentCount ?? 0}</span>
           </div>
-        </div>
-        <div className="text-sm text-slate-600">
-          {mateReport?.lastStatus && mateReport.lastReportedAt
-            ? `Laatst gemeld: ${reportStatusLabel(mateReport.lastStatus)} op ${formatReportDate(mateReport.lastReportedAt)}`
-            : "Nog geen melding doorgegeven."}
         </div>
       </div>
 
@@ -3032,11 +3060,11 @@ export default function MapClient({ places }: { places: Place[] }) {
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Info</div>
-                <div className="relative mt-2 h-7 w-40 sm:h-8 sm:w-44" aria-label="Mate Alert">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{infoPanelText.eyebrow}</div>
+                <div className="relative mt-2 h-7 w-40 sm:h-8 sm:w-44" aria-label={infoPanelText.logoLabel}>
                   <Image
                     src="/mate%20alert.png"
-                    alt="Mate Alert"
+                    alt={infoPanelText.logoLabel}
                     fill
                     sizes="176px"
                     className="object-contain object-left"
@@ -3048,88 +3076,46 @@ export default function MapClient({ places }: { places: Place[] }) {
                 type="button"
                 className={accentIconButtonClass}
                 onClick={() => setInfoPanelOpen(false)}
-                aria-label="Sluit info"
+                aria-label={infoPanelText.closeLabel}
               >
                 <X className="h-4 w-4" aria-hidden="true" strokeWidth={2.3} />
               </button>
             </div>
 
-<div className="smooth-scroll-panel -mx-1 mt-4 flex-1 space-y-4 overflow-auto px-1 pr-2 text-sm leading-relaxed text-slate-700">
-  <p>
-    Heb je zin in die koude, overheerlijke en verslavende{" "}
-    <a
-      href="https://www.club-mate.de/en/"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-semibold underline underline-offset-2 hover:opacity-80"
-    >
-      Club Mate
-    </a>
-    ? Of heb jij de drang om alle spots met{" "}
-    <a
-      href="https://www.clubmate.de/en/"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-semibold underline underline-offset-2 hover:opacity-80"
-    >
-      Club Mate
-    </a>{" "}
-    mee aan te vullen op de kaart? Dan is dit de juiste plek.
-  </p>
-  <p>
-    Deze website is een verzameling van verschillende verkooppunten van het
-    drankje. Van cafés, koffiebars en restaurants tot supermarkten,
-    nachtwinkels en andere random plekken waar iemand ooit plots oog in oog
-    stond met een flesje{" "}
-    <a
-      href="https://www.clubmate.de/en/"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-semibold underline underline-offset-2 hover:opacity-80"
-    >
-      Club Mate
-    </a>
-    .
-  </p>
-  <p>
-    Deze website is volledig community based. Elke locatie werd handmatig
-    toegevoegd door mensen die ergens een spot gevonden hebben. Daardoor kan het
-    zijn dat sommige locaties niet meer kloppen, tijdelijk uitverkocht zijn of
-    gestopt zijn met verkopen. In dat geval kan je dit melden bij de locatie
-    zelf zodat de kaart een beetje proper blijft voor de volgende wanhopige
-    zoeker.
-  </p>
-  <div>
-    <h3 className="mb-2 font-bold">Hoe werkt het?</h3>
-    <p>
-      Zelf een mate gespot in het wild? Gebruik dan de Mate Alert knop onderaan
-      het scherm en geef de locatie in. Na het toevoegen verschijnt deze
-      automatisch op de kaart zodat anderen die plek ook kunnen terugvinden.
-    </p>
-  </div>
-  <p>
-    Je kan op locaties klikken om meer info te bekijken zoals de naam van de
-    plek, het adres en soms extra info die werd toegevoegd door andere
-    gebruikers. Sommige spots zijn hidden gems. Andere zijn letterlijk gewoon een
-    tankstation ergens in de middle of nowhere. Alles telt.
-  </p>
-  <p>
-    Dus: zie je ergens{" "}
-    <a
-      href="https://www.club-mate.de/en/"
-      target="_blank"
-      rel="noopener noreferrer"
-      className="font-semibold underline underline-offset-2 hover:opacity-80"
-    >
-      Club Mate
-    </a>{" "}
-    staan? Voeg het toe. Zie je een fout? Meld het. En vooral: ga op
-    ontdekking.
-  </p>
-  <p className="font-semibold">
-    Veel succes met uw zoektocht naar cafeïne en innerlijke vrede.
-  </p>
-</div>
+            <div className="smooth-scroll-panel -mx-1 mt-4 flex-1 space-y-4 overflow-auto px-1 pr-2 text-sm leading-relaxed text-slate-700">
+              {infoPanelText.blocks.map((block, blockIndex) => {
+                const content = block.parts.map((part, partIndex) =>
+                  "href" in part && part.href ? (
+                    <a
+                      key={`${blockIndex}-${partIndex}`}
+                      href={part.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold underline underline-offset-2 hover:opacity-80"
+                    >
+                      {part.text}
+                    </a>
+                  ) : (
+                    <span key={`${blockIndex}-${partIndex}`}>{part.text}</span>
+                  ),
+                );
+
+                if (block.kind === "section") {
+                  return (
+                    <div key={blockIndex}>
+                      <h3 className="mb-2 font-bold">{block.heading}</h3>
+                      <p>{content}</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <p key={blockIndex} className={block.kind === "emphasis" ? "font-semibold" : undefined}>
+                    {content}
+                  </p>
+                );
+              })}
+            </div>
           </motion.div>
         </motion.div>
         )}
