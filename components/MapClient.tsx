@@ -162,6 +162,7 @@ type MateReport = {
 type MateReports = Record<string, MateReport>;
 
 type PendingMateReport = {
+  placeKey: string;
   placeName: string;
   status: MateReportStatus;
 };
@@ -656,7 +657,7 @@ function PlaceDetails({
   status: OpenStatus;
   distance?: number;
   mateReport?: MateReport;
-  onMateReport: (placeName: string, status: MateReportStatus) => void;
+  onMateReport: (placeKey: string, placeName: string, status: MateReportStatus) => void;
   onOpenDirections: (target: DirectionsTarget) => void;
   onClose?: () => void;
   todayIndex: number;
@@ -755,7 +756,7 @@ function PlaceDetails({
           <button
             type="button"
             className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#d9261c]/45 bg-[#f7c200] px-2.5 py-2 text-xs font-bold text-[#26304a] shadow-[0_5px_14px_rgba(52,38,31,0.11)] transition hover:-translate-y-0.5 hover:bg-[#e9b700] hover:shadow-[0_8px_18px_rgba(52,38,31,0.15)] active:translate-y-0"
-            onClick={() => onMateReport(place.name, "present")}
+            onClick={() => onMateReport(getPlaceKey(place), place.name, "present")}
           >
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" strokeWidth={2.4} />
             Aanwezig
@@ -763,7 +764,7 @@ function PlaceDetails({
           <button
             type="button"
             className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-rose-300/85 bg-white/70 px-2.5 py-2 text-xs font-bold text-rose-800 shadow-[0_5px_14px_rgba(52,38,31,0.07)] transition hover:-translate-y-0.5 hover:bg-rose-50 hover:shadow-[0_8px_18px_rgba(52,38,31,0.11)] active:translate-y-0"
-            onClick={() => onMateReport(place.name, "absent")}
+            onClick={() => onMateReport(getPlaceKey(place), place.name, "absent")}
           >
             <CircleSlash2 className="h-4 w-4" aria-hidden="true" strokeWidth={2.4} />
             Afwezig
@@ -895,12 +896,12 @@ function ClusteredPlaceMarkers({
 
   useEffect(() => {
     const clusterGroup = L.markerClusterGroup({
-      animate: false,
+      animate: true,
       animateAddingMarkers: false,
-      chunkedLoading: true,
+      chunkedLoading: false,
       disableClusteringAtZoom: 18,
       maxClusterRadius: 42,
-      removeOutsideVisibleBounds: false,
+      removeOutsideVisibleBounds: true,
       showCoverageOnHover: false,
       spiderfyOnEveryZoom: false,
       spiderfyOnMaxZoom: false,
@@ -916,8 +917,8 @@ function ClusteredPlaceMarkers({
 
       map.flyToBounds(bounds, {
         animate: true,
-        duration: 0.65,
-        easeLinearity: 0.18,
+        duration: 0.5,
+        easeLinearity: 0.2,
         maxZoom: nextZoom,
         padding: [96, 96],
       });
@@ -927,6 +928,8 @@ function ClusteredPlaceMarkers({
       const marker = L.marker(place.position, {
         icon,
         title: place.name,
+        keyboard: false,
+        riseOnHover: true,
       });
 
       marker.on("click", () => {
@@ -1035,7 +1038,7 @@ export default function MapClient({ places }: { places: Place[] }) {
   const [focusTarget, setFocusTarget] = useState<[number, number] | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [pendingMateReport, setPendingMateReport] = useState<PendingMateReport | null>(null);
-  const [localMateReports] = useState<MateReports>(() => {
+  const [localMateReports, setLocalMateReports] = useState<MateReports>(() => {
     if (typeof window === "undefined") {
       return {};
     }
@@ -1981,10 +1984,46 @@ export default function MapClient({ places }: { places: Place[] }) {
     return getMateReportFromPlace(place) ?? localMateReports[normalizeType(placeName)];
   };
 
-  const reportMateStatus = async (placeName: string, status: MateReportStatus) => {
-    const place = safePlaces.find((candidatePlace) => getPlaceKey(candidatePlace) === placeName);
+  const applyLocalMateReport = (place: Place, status: MateReportStatus) => {
+    const reportedAt = new Date().toISOString();
+    const placeKey = getPlaceKey(place);
+    const existingReport = getMateReportFromPlace(place) ?? localMateReports[normalizeType(placeKey)];
+    const updatedReport: MateReport = {
+      lastStatus: status,
+      lastReportedAt: reportedAt,
+      presentCount: Math.max(0, Number(existingReport?.presentCount ?? 0)) + (status === "present" ? 1 : 0),
+      absentCount: Math.max(0, Number(existingReport?.absentCount ?? 0)) + (status === "absent" ? 1 : 0),
+      consecutiveAbsentCount:
+        status === "absent"
+          ? Math.max(0, Number(existingReport?.consecutiveAbsentCount ?? 0)) + 1
+          : 0,
+    };
+    const updatedPlace: Place = {
+      ...place,
+      presentCount: updatedReport.presentCount,
+      absentCount: updatedReport.absentCount,
+      consecutiveAbsentCount: updatedReport.consecutiveAbsentCount,
+      lastReportStatus: updatedReport.lastStatus,
+      lastReportedAt: updatedReport.lastReportedAt,
+    };
+
+    updatePlaceInState(updatedPlace, placeKey);
+    setLocalMateReports((currentReports) => {
+      const nextReports = {
+        ...currentReports,
+        [normalizeType(placeKey)]: updatedReport,
+      };
+
+      window.localStorage.setItem(mateReportsStorageKey, JSON.stringify(nextReports));
+      return nextReports;
+    });
+  };
+
+  const reportMateStatus = async (placeKey: string, status: MateReportStatus) => {
+    const place = safePlaces.find((candidatePlace) => getPlaceKey(candidatePlace) === placeKey);
 
     if (!place) {
+      toast.error("Deze locatie kon niet gevonden worden. Vernieuw de pagina.");
       return false;
     }
 
@@ -1999,8 +2038,9 @@ export default function MapClient({ places }: { places: Place[] }) {
       const data = await response.json().catch(() => null);
 
       if (!response.ok || (!data?.place && !data?.deleted)) {
-        toast.error(data?.error ?? "Melding opslaan is mislukt.");
-        return false;
+        applyLocalMateReport(place, status);
+        toast.message("Melding lokaal bijgewerkt. Online opslaan lukte niet.");
+        return true;
       }
 
       if (data.deleted) {
@@ -2015,8 +2055,9 @@ export default function MapClient({ places }: { places: Place[] }) {
       updatePlaceInState(data.place, place.name);
       return true;
     } catch {
-      toast.error("Melding kon niet worden opgeslagen. Controleer de verbinding of database.");
-      return false;
+      applyLocalMateReport(place, status);
+      toast.message("Melding lokaal bijgewerkt. Controleer later de databaseverbinding.");
+      return true;
     }
   };
 
@@ -2065,7 +2106,7 @@ export default function MapClient({ places }: { places: Place[] }) {
       return;
     }
 
-    const didSaveReport = await reportMateStatus(pendingMateReport.placeName, pendingMateReport.status);
+    const didSaveReport = await reportMateStatus(pendingMateReport.placeKey, pendingMateReport.status);
     setPendingMateReport(null);
 
     if (didSaveReport) {
@@ -2701,13 +2742,14 @@ export default function MapClient({ places }: { places: Place[] }) {
           inertia
           inertiaDeceleration={2800}
           inertiaMaxSpeed={1200}
+          easeLinearity={0.18}
           keyboard={false}
           boxZoom={false}
           doubleClickZoom
           touchZoom
           tapHold={false}
           wheelDebounceTime={16}
-          wheelPxPerZoomLevel={72}
+          wheelPxPerZoomLevel={84}
         >
         <MapViewportController focusTarget={focusTarget} />
         <MapInteractionController
@@ -3150,7 +3192,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               status={placeStatuses.get(getPlaceKey(selectedPlace)) ?? getOpenStatus(selectedPlace, now)}
               distance={selectedPlaceDistance}
               mateReport={selectedMateReport}
-              onMateReport={(placeName, status) => setPendingMateReport({ placeName, status })}
+              onMateReport={(placeKey, placeName, status) => setPendingMateReport({ placeKey, placeName, status })}
               onOpenDirections={openDirections}
               onClose={() => setSelectedPlaceName(null)}
               todayIndex={todayIndex}
@@ -3161,23 +3203,43 @@ export default function MapClient({ places }: { places: Place[] }) {
       </AnimatePresence>
 
       {pendingMateReport && (
-        <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/40 p-4">
-          <div className="retro-modal w-full max-w-sm rounded-[2rem] border border-white/55 bg-white/90 p-5 shadow-[0_28px_80px_rgba(15,23,42,0.28)] backdrop-blur-xl">
-            <div className="retro-display text-2xl leading-tight text-[#2f2822]">Melding bevestigen</div>
-            <div className="mt-2 text-sm text-slate-600">
-              Wil je melden dat bij {pendingMateReport.placeName} {reportStatusLabel(pendingMateReport.status).toLowerCase()} is?
+        <div className="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/42 p-4 backdrop-blur-sm">
+          <div className="retro-modal w-full max-w-[22rem] overflow-hidden rounded-[1.5rem] border border-white/60 bg-[#fff8e8]/94 p-4 shadow-[0_26px_70px_rgba(52,38,31,0.26)] backdrop-blur-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[0.68rem] font-bold uppercase tracking-[0.09em] text-slate-500">Voorraadmelding</div>
+                <div className="retro-display mt-1 text-[1.65rem] leading-tight text-[#2f2822]">Bevestigen?</div>
+              </div>
+              <div className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
+                pendingMateReport.status === "present"
+                  ? "border-[#d9261c]/45 bg-[#f7c200] text-[#26304a]"
+                  : "border-rose-300 bg-rose-50 text-rose-800"
+              }`}>
+                {pendingMateReport.status === "present" ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" strokeWidth={2.4} />
+                ) : (
+                  <CircleSlash2 className="h-3.5 w-3.5" aria-hidden="true" strokeWidth={2.4} />
+                )}
+                {shortReportStatusLabel(pendingMateReport.status)}
+              </div>
             </div>
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+
+            <div className="mt-3 rounded-2xl border border-white/70 bg-white/48 px-3 py-2.5 text-sm leading-snug text-slate-700">
+              Meld <span className="font-bold text-[#26304a]">{pendingMateReport.placeName}</span> als{" "}
+              <span className="font-bold">{reportStatusLabel(pendingMateReport.status).toLowerCase()}</span>.
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className={`${accentButtonClass} min-h-11 px-4 py-3 text-sm font-medium`}
+                className="min-h-10 rounded-xl border border-[#9f4a3d]/28 bg-white/62 px-4 py-2.5 text-sm font-bold text-[#46362d] shadow-[0_5px_14px_rgba(52,38,31,0.07)] transition hover:-translate-y-0.5 hover:bg-white/86 active:translate-y-0"
                 onClick={() => setPendingMateReport(null)}
               >
                 Annuleer
               </button>
               <button
                 type="button"
-                className={`${accentButtonClass} min-h-11 px-4 py-3 text-sm font-medium`}
+                className="min-h-10 rounded-xl border border-[#d9261c]/50 bg-[#f7c200] px-4 py-2.5 text-sm font-bold text-[#26304a] shadow-[0_7px_18px_rgba(52,38,31,0.13)] transition hover:-translate-y-0.5 hover:bg-[#e9b700] active:translate-y-0"
                 onClick={confirmPendingMateReport}
               >
                 Bevestigen

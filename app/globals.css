@@ -178,10 +178,14 @@ textarea:focus {
 }
 
 .place-marker {
-  filter: drop-shadow(0 2px 2px rgba(52, 38, 31, 0.18));
+  filter: none;
   transform-origin: bottom center;
   transition: none !important;
   animation: none !important;
+  backface-visibility: hidden;
+  contain: layout paint style;
+  pointer-events: auto;
+  transform-style: flat;
   will-change: transform;
 }
 
@@ -208,13 +212,17 @@ textarea:focus {
 .map-surface .leaflet-marker-icon,
 .map-surface .leaflet-marker-shadow,
 .map-surface .leaflet-marker-pane .marker-cluster {
+  backface-visibility: hidden;
+  contain: layout paint style;
   transition: none !important;
   animation: none !important;
+  transform-style: flat;
+  will-change: transform;
 }
 
 .map-surface .marker-cluster {
-  background: rgba(247, 194, 0, 0.24);
   border-radius: 999px;
+  background: rgba(229, 189, 72, 0.24);
   color: #26304a;
   box-shadow: 0 2px 5px rgba(52, 38, 31, 0.12);
 }
@@ -226,7 +234,7 @@ textarea:focus {
   margin-top: 4px;
   border: 1.5px solid rgba(217, 38, 28, 0.72);
   border-radius: 999px;
-  background: #f7c200;
+  background: #e5bd48;
   color: #26304a;
   font-family: "Bricolage Grotesque", var(--font-bricolage-grotesque), Arial, Helvetica, sans-serif;
   font-size: 13px;
@@ -241,7 +249,7 @@ textarea:focus {
 .map-surface .marker-cluster-small,
 .map-surface .marker-cluster-medium,
 .map-surface .marker-cluster-large {
-  background-color: rgba(247, 194, 0, 0.24);
+  background-color: rgba(229, 189, 72, 0.24);
 }
 
 .map-surface .leaflet-cluster-spider-leg {
