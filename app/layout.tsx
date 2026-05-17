@@ -18,9 +18,39 @@ const dmSerifDisplay = DM_Serif_Display({
   variable: "--font-dm-serif-display",
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000");
+const previewImage = {
+  url: "/website-front.png",
+  width: 1000,
+  height: 1000,
+  alt: "Mate Alert kaart met Club Mate locaties",
+};
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Mate Alert",
   description: "Een alternatieve kaart voor cafés en winkels met Club Mate in Antwerpen.",
+  openGraph: {
+    title: "Mate Alert",
+    description: "Een alternatieve kaart voor cafés en winkels met Club Mate in Antwerpen.",
+    url: "/",
+    siteName: "Mate Alert",
+    images: [previewImage],
+    locale: "nl_BE",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Mate Alert",
+    description: "Een alternatieve kaart voor cafés en winkels met Club Mate in Antwerpen.",
+    images: [previewImage],
+  },
 };
 
 export const viewport: Viewport = {
