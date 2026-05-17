@@ -12,6 +12,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
+import { introPopupText } from "@/data/siteText";
 import type { MateReportStatus, OpeningInterval, Place } from "@/data/placeTypes";
 import { Button } from "@/components/ui/button";
 import { LoaderTwo } from "@/components/ui/loader";
@@ -2994,15 +2995,8 @@ export default function MapClient({ places }: { places: Place[] }) {
             </div>
 
             <div className="mt-5 space-y-3 text-sm leading-relaxed text-slate-700">
-              <p>
-                Mate Alert toont plekken waar mensen Club Mate hebben gevonden.
-                Klik op een pin voor adres, openingsuren en voorraadmeldingen.
-              </p>
-              <p>
-                Zie je ergens Club Mate staan? Gebruik de grote Mate Alert knop
-                onderaan om die spot toe te voegen. Klopt een locatie niet meer,
-                meld dan dat Club Mate niet meer aanwezig is.
-              </p>
+              <p>{introPopupText.firstParagraph}</p>
+              <p>{introPopupText.secondParagraph}</p>
             </div>
 
             <button
@@ -3010,7 +3004,7 @@ export default function MapClient({ places }: { places: Place[] }) {
               className={`${accentButtonClass} mt-5 min-h-11 w-full px-5 py-3 text-sm font-semibold`}
               onClick={closeIntroPanel}
             >
-              Starten
+              {introPopupText.buttonLabel}
             </button>
           </motion.div>
         </motion.div>
